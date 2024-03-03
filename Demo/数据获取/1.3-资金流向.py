@@ -22,18 +22,10 @@ pd.set_option('display.precision', 2)
 # 设置是否显示科学计数法
 pd.set_option('display.float_format', '{:.2f}'.format)
 
-def convert_to_wan(value):
-    if '亿' in value:
-        return float(value.replace('亿', '')) * 10000
-    else:
-        return float(value.replace('万', ''))
-
 # 一、获取实时数据（日、周、月）
 def get_stock_flow(source=''):
     if source == 'akshare':
         df = ak.stock_fund_flow_individual(symbol='即时')
-        df['流入资金'] = df['流入资金'].apply(convert_to_wan)
-        # df['流出资金'] = df['流出资金'].apply(convert_to_wan)
         df_res = df.sort_values(by='流入资金', ascending=False)
         return df_res
     else:
@@ -41,3 +33,10 @@ def get_stock_flow(source=''):
 
 
 print(get_stock_flow(source='akshare'))
+
+# def convert_to_wan(value):
+#     if '亿' in value:
+#         return float(value.replace('亿', '')) * 10000
+#     else:
+#         return float(value.replace('万', ''))
+        # df['流入资金'] = df['流入资金'].apply(convert_to_wan)
