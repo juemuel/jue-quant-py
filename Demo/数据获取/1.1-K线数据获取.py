@@ -1,14 +1,5 @@
-# pip install akshare --upgrade
-# pip install efinance --upgrade
-# pip install qstock -–upgrade
-# TuShare  https://tushare.pro/document/1       https://tushare.pro/document/2
-# AKShare  https://akshare.akfamily.xyz/introduction.html      https://akshare.akfamily.xyz/data/index.html
-# Efinance https://github.com/Micro-sheep/efinance      https://efinance.readthedocs.io/en/latest/
-# Qstock https://pypi.org/project/qstock/
-import tushare as ts
-import akshare as ak
-import efinance as ef
-import qstock as qs
+from common import *
+
 ts.set_token("a1533fd58c006f92b96286c3af7f044ad853d51cf2dec60e8f32b33e")
 
 # 一、获取行情数据（日、周、月）雪球：https://xueqiu.com/S/SH000001 代码、上市日期
