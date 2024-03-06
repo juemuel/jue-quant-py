@@ -1,19 +1,24 @@
 import akshare as ak
 import pandas as pd
-# 显示完成列
-pd.set_option('display.max_columns', None)
-# 显示完成行
-pd.set_option('display.max_rows', None)
-# 输出不折行
-pd.set_option('expand_frame_repr', False)
+from tabulate import tabulate
 
-'''
-沪深通资金流向
-'''
+# 设置显示的最大列数
+pd.set_option('display.max_columns', None)
+# 设置显示的最大行数
+pd.set_option('display.max_rows', None)
+# 设置显示每列的最大宽度
+pd.set_option('display.max_colwidth', None)
+# 设置显示小数的精度
+pd.set_option('display.precision', 2)
+# 设置是否显示科学计数法
+pd.set_option('display.float_format', '{:.2f}'.format)
+
+
 df = ak.stock_hsgt_fund_flow_summary_em()
-# print(df)
-# 根据条件进行筛选，从资金方向选择北向，选择板块为沪股通、深股通
+print(tabulate(df, headers='keys', tablefmt='psql'))
+# 根据条件进行筛选
 northward = df[df['资金方向'] == '北向']
+
 hg_net = round(northward[northward['板块'] == '沪股通']['成交净买额'].sum(), 4)
 sg_net = round(northward[northward['板块'] == '深股通']['成交净买额'].sum(), 4)
 bx_net = round(hg_net + sg_net)
@@ -30,11 +35,13 @@ print(f"北向资金全天净 {bx_txt} 亿元，其中沪股通净 {hg_txt} 亿�
 概念股资金流向
 '''
 # “即时”, "3日排行", "5日排行", "10日排行", "20日排行"
-# df = ak.stock_fund_flow_concept(symbol="即时")
-# print(df.sort_values(by="净额", ascending=False))
+df = ak.stock_fund_flow_concept(symbol="即时")
+gainian_df = df.sort_values(by="行业-涨跌幅", ascending=False)
+print(tabulate(gainian_df, headers='keys', tablefmt='psql'))
 
 '''
 行业资金流
 '''
-# df = ak.stock_fund_flow_industry(symbol="5日排行")
-# print(df.sort_values(by="净额", ascending=False))
+df = ak.stock_fund_flow_industry(symbol="5日排行")
+hangye_df = df.sort_values(by="净额", ascending=False)
+print(tabulate(hangye_df, headers='keys', tablefmt='psql'))
