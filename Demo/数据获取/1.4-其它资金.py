@@ -12,9 +12,8 @@ pd.set_option('expand_frame_repr', False)
 '''
 df = ak.stock_hsgt_fund_flow_summary_em()
 # print(df)
-# 根据条件进行筛选
+# 根据条件进行筛选，从资金方向选择北向，选择板块为沪股通、深股通
 northward = df[df['资金方向'] == '北向']
-
 hg_net = round(northward[northward['板块'] == '沪股通']['成交净买额'].sum(), 4)
 sg_net = round(northward[northward['板块'] == '深股通']['成交净买额'].sum(), 4)
 bx_net = round(hg_net + sg_net)
