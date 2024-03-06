@@ -1,15 +1,15 @@
-from comm import *
+from common import *
 
-# 财务报表-东财
+# 一、获取某个股票的财务报表：ak.stock_balance_sheet_by_report_em，数据很多
 df = ak.stock_balance_sheet_by_report_em(symbol='SH600519')
-# print(df)
-# 获取最近三年的一季度报，重新更新索引
+# 获取最近三年的一季度报｜年报，重新更新索引
 df = df[df['REPORT_TYPE'] == '一季报'].head(3).reset_index(drop=True)
 # 去掉数据中NaN的列
 df = df.dropna(axis=1)
 '''
 任务：翻转结果集中的行和列
 '''
+# Tips：行列互转
 df = pd.pivot_table(df, columns='REPORT_DATE_NAME')
 print(df)
 # 预约披露时间-巨潮资讯

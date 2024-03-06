@@ -1,16 +1,19 @@
-from comm import *
+from common import *
 
-# 股东变动
+# 某日期的股东变动：ak.stock_zh_a_gdhs
 zh_a_gdhs_df = ak.stock_zh_a_gdhs(symbol='20230609')
-print(zh_a_gdhs_df)
+# print(zh_a_gdhs_df)
 
 '''
 任务：使用tabulate打印markdown结果
 '''
-print('*' * 100)
-print(tabulate(zh_a_gdhs_df, tablefmt='github'))
+# Tips：tabulate技巧，markdown表格用tablefmt设置github格式，表头用headers设置
+# print('*' * 100)
+# print(tabulate(zh_a_gdhs_df, tablefmt='github'))
 print('*' * 100)
 print(tabulate(zh_a_gdhs_df, headers='keys', tablefmt='github'))
+
+# 下面几个不怎么用
 # 股东户数详情
 # zh_a_gdhs_detail_em_df = ak.stock_zh_a_gdhs_detail_em(symbol='')
 

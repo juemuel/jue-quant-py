@@ -1,4 +1,4 @@
-from comm import *
+from common import *
 from qstock import plot
 
 # 获取中国GDP指标

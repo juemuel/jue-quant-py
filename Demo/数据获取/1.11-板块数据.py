@@ -1,4 +1,4 @@
-from comm import *
+from common import *
 from pyecharts.charts import TreeMap
 from pyecharts import options as opts
 

@@ -1,4 +1,4 @@
-from comm import *
+from common import *
 
 
 def filter_stock(df: pd.DataFrame):
