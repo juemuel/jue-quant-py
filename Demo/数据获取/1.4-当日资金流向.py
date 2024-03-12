@@ -1,24 +1,10 @@
-import akshare as ak
-import pandas as pd
-from tabulate import tabulate
-
-# 设置显示的最大列数
-pd.set_option('display.max_columns', None)
-# 设置显示的最大行数
-pd.set_option('display.max_rows', None)
-# 设置显示每列的最大宽度
-pd.set_option('display.max_colwidth', None)
-# 设置显示小数的精度
-pd.set_option('display.precision', 2)
-# 设置是否显示科学计数法
-pd.set_option('display.float_format', '{:.2f}'.format)
-
+from common import *
 
 df = ak.stock_hsgt_fund_flow_summary_em()
 print(tabulate(df, headers='keys', tablefmt='psql'))
-# 根据条件进行筛选
+# PYTHON Tips01：根据列值为北向 取出行
 northward = df[df['资金方向'] == '北向']
-
+# PYTHON Tips02：
 hg_net = round(northward[northward['板块'] == '沪股通']['成交净买额'].sum(), 4)
 sg_net = round(northward[northward['板块'] == '深股通']['成交净买额'].sum(), 4)
 bx_net = round(hg_net + sg_net)

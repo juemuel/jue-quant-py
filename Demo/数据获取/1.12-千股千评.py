@@ -2,17 +2,17 @@ from common import *
 
 
 def filter_stock(df: pd.DataFrame):
-	# 剔除出包含ST的股票
+	# PANDAS Tips：取出指定字段中包含'ST'的股票，再用drop删除
 	st_data = df[df['名称'].str.contains('ST')]
 	sts = st_data['代码'].values.tolist()
 	for st in sts:
 		df = df.drop(index=df.loc[(df['代码'] == st)].index)
-	# 剔除出创业板的股票
+	# 再剔除出创业板的股票
 	cy_data = df[df['代码'].str.contains('^30')]
 	cys = cy_data['代码'].values.tolist()
 	for cy in cys:
 		df = df.drop(index=df.loc[(df['代码'] == cy)].index)
-	# 剔除出科创板的股票
+	# 再剔除出科创板的股票
 	kc_data = df[df['代码'].str.contains('^68')]
 	kcs = kc_data['代码'].values.tolist()
 	for kc in kcs:

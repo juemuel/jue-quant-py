@@ -1,7 +1,7 @@
 from common import *
 from pyecharts.charts import TreeMap
 from pyecharts import options as opts
-
+# 1.下载https://github.com/pyecharts/pyecharts 2.封装输出到指定地址
 # 还可以是行业板块
 date_type = '概念板块'
 
@@ -58,4 +58,4 @@ TreeMap().add(
 		opts.TreeMapLevelsOpts(color_saturation=[0.3, 0.5]),
 	],
 ).set_global_opts(title_opts=opts.TitleOpts(title=date_type + "-个股排行")) \
-	.render("/Users/renmeng/Desktop/treemap_levels.html")
+	.render("/Users/jvjielv/Downloads/treemap_levels.html")

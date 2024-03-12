@@ -5,7 +5,7 @@ import jieba.analyse
 import jieba.posseg as pseg
 from snownlp import SnowNLP
 
-from comm import *
+from common import *
 
 # 个股新闻接口
 news_df = ak.stock_news_em(symbol='000651')

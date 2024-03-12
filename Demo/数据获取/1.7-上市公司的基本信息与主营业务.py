@@ -3,7 +3,7 @@ from common import *
 # 获取个股的主营构成记录，格力电器为例
 zygc_em_df = ak.stock_zygc_em(symbol='SZ000651')
 # 任务：找出最新的一次报告
-# tips：按某个字段分组groupby，取出第一个非空值，并排序；再筛选取出最新的报告
+# PANDAS Tips：按某个字段分组groupby，取出第一个非空值，并排序；再筛选取出最新的报告
 new_date = zygc_em_df.groupby('报告日期')['报告日期'].first().sort_values(ascending=False)[0]
 # print(new_date)
 new_df = zygc_em_df[zygc_em_df['报告日期'] == new_date]
