@@ -1,7 +1,7 @@
-# pip install tushare --upgrade
-# pip install akshare --upgrade
-# pip install efinance --upgrade
-# pip install qstock -–upgrade
+# pip install tushare --upgrade 默认即可
+# pip install akshare --upgrade 默认即可
+# pip install efinance -i https://mirrors.aliyun.com/pypi/simple/ 需要镜像
+# pip install qstock -i https://mirrors.aliyun.com/pypi/simple/ 需要镜像
 # TuShare  https://tushare.pro/document/1       https://tushare.pro/document/2
 # AKShare  https://akshare.akfamily.xyz/introduction.html      https://akshare.akfamily.xyz/data/index.html
 # Efinance https://github.com/Micro-sheep/efinance      https://efinance.readthedocs.io/en/latest/
