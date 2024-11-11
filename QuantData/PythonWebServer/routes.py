@@ -10,7 +10,7 @@ bp = Blueprint('main', __name__)
 @bp.route('/')
 def home():
     return 'Welcome to the Home Page!'
-
+# 配置信息路由
 @bp.route('/config')
 def config_info():
     config_details = current_app.config['ENV']
