@@ -30,3 +30,6 @@ pd.set_option('display.precision', 2)
 pd.set_option('display.float_format', '{:.2f}'.format)
 
 token = 'a1533fd58c006f92b96286c3af7f044ad853d51cf2dec60e8f32b33e'
+
+# pandas库使用
+# 1. 排序 sort_values 或 iloc
