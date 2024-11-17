@@ -2,6 +2,7 @@ from common import *
 
 # 一、获取实时数据（日、周、月）
 def get_stock_realtime_data(source='', code=''):
+    #  doc：https://tushare.pro/document/2
     if source == 'tushare':
         df = ts.get_realtime_quotes(code) # df = ts.realtime_quote(ts_code="000651.SZ")
         return df
