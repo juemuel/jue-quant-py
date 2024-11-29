@@ -172,11 +172,10 @@ if __name__ == "__main__":
             # 2. 生成当前字段的误差列表errors，每个元素是一个三元组 (source, col, error)，其中 source 是数据源名称，col 是列名，error 是误差 Series
             errors = []
             for source in existing_sources:
-                if source != 'tushare':
-                    col = f'{field}_{source}'
-                    if col in merged_df.columns:
-                        error = abs(merged_df[reference_col] - merged_df[col]) / merged_df[reference_col]
-                        errors.append((source, col, error))
+                col = f'{field}_{source}'
+                if col in merged_df.columns:
+                    error = abs(merged_df[reference_col] - merged_df[col]) / merged_df[reference_col]
+                    errors.append((source, col, error))
             # 判断误差是否在允许范围内
             if errors:
                 all_errors = pd.concat([e[2] for e in errors], axis=1).max(axis=1)
