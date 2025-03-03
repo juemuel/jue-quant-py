@@ -79,7 +79,8 @@ def get_stock_history_data(source='akshare', code='', start_date=None, end_date=
         # end：默认None
         # freq：周期，默认日，1：1分钟（最近5个交易日），5：5分钟，15：15分钟，30，60；101或'D'或'd'：日；102或‘w’或'W'：周; 103或'm'或'M': 月
         # fqt：复权，0：不复权，1：前复权；2：后复权，默认前复权
-    # DataFrame: [代码] + 股票名称, 日期, 开盘, 最高, 最低, 收盘, 成交量, 成交额, 换手率
+    # DataFrame: [代码] + 股票名称, 日期,
+    # 开盘, 最高, 最低, 收盘, 成交量, 成交额, 换手率
     # doc: https://github.com/tkfy920/qstock
     elif source == 'qstock':
         df = qs.get_data(code_list=code, start=start_date, end=end_date, freq='d', fqt=1)
