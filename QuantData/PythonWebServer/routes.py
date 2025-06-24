@@ -1,7 +1,7 @@
 # routes.py
 from flask import Blueprint, make_response, request, render_template, current_app
 import os
-
+from 数据获取.1_1_K线数据 import get_stock_history_data
 # 使用蓝图（组织视图函数、模板和静态文件等）
 bp = Blueprint('main', __name__)
 
@@ -42,3 +42,13 @@ def submit():
 @bp.route('/hello/<name>')
 def hello(name):
     return render_template('hello.html', name=name)
+
+@bp.route('/api/v1/index/data')
+def get_index_data():
+    source = request.args.get('source', 'tushare')
+    market = request.args.get('market', 'SH')
+    code = request.args.get('code', '000001')
+
+    df = get_stock_history_data(source=source, market=code + '.' + market)
+    result = df[['日期', '收盘']].to_dict(orient='records')
+    return jsonify(result)
