@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List
-from ...models.index import IndexData
-from ...services import data_service
-from ...core.response import success, error
+from app.models.index import IndexData
+from app.services import data_service
+from app.core.response import success, error
 
 router = APIRouter(prefix="/data", tags=["Data"])
 

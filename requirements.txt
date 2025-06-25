@@ -17,3 +17,4 @@ pyecharts~=2.0.8
 plotly~=6.1.2
 flask~=3.1.1
 prettytable~=3.16.0
+selenium~=4.21.0

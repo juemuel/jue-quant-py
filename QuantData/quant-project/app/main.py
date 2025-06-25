@@ -7,12 +7,15 @@ sys.path.append(project_root)
 
 from fastapi import FastAPI
 from pydantic import BaseModel  # 数据验证库
-from core.middleware import add_middlewares
-from core.logger import setup_logger
-from routers.data.stock import router as stock_router
-from routers.data.macro import router as macro_router
-from routers.concepts.market_concept import router as concept_router
-from routers.prediction.forecast import router as forecast_router
+from app.core.middleware import add_middlewares
+from app.core.logger import setup_logger
+from app.routers.data.stock import router as stock_router
+from app.routers.data.macro import router as macro_router
+from app.routers.concepts.market_concept import router as concept_router
+from app.routers.prediction.forecast import router as forecast_router
+
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
 
 app = FastAPI(title="Quant Data API")
 add_middlewares(app)
