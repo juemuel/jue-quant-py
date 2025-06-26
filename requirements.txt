@@ -49,7 +49,7 @@ click~=8.1.8
 jinja2~=3.1.6
 blinker~=1.9.0
 itsdangerous~=2.2.0
-pywin32~=310
+pywin32==310; sys_platform == 'win32'
 jieba~=0.42.1
 mdurl~=0.1.2
 charset-normalizer~=3.4.2

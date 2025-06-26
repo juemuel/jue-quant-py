@@ -5,34 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="9e300185-fdce-4341-9a9e-fbf5f5fc82ec" name="更改" comment="">
-      <change afterPath="$PROJECT_DIR$/data_providers/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/data_providers/akshare.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/data_providers/qstock.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/data_providers/tushare.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/data_providers/yfinance.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/.env" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/config.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/core/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/routers/router.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/core/exception_handler.py" beforeDir="false" afterPath="$PROJECT_DIR$/core/exception_handler.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/core/logger.py" beforeDir="false" afterPath="$PROJECT_DIR$/core/logger.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/core/middleware.py" beforeDir="false" afterPath="$PROJECT_DIR$/core/middleware.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/core/response.py" beforeDir="false" afterPath="$PROJECT_DIR$/core/response.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/routers/concepts/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/concept_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/routers/concepts/market_concept.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/routers/data/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/common/settings.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/routers/data/macro.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/routers/data/stock.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/routers/prediction/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/core/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/routers/prediction/forecast.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/data_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/data_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/forecast_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/forecast_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/macro_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/macro_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/common/jqdatasdk.py" beforeDir="false" afterPath="$PROJECT_DIR$/common/jqdatasdk.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/common/response.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/common/utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/common/utils.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/commonLib.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data_source/concept_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_source/concept_data.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/jue-quant.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/jue-quant.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app.log" beforeDir="false" afterPath="$PROJECT_DIR$/app.log" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -79,13 +55,14 @@
     "RunOnceActivity.git.unshallow": "true",
     "dart.analysis.tool.window.visible": "false",
     "git-widget-placeholder": "master",
-    "last_opened_file_path": "C:/proj/ELSE/SELF/jue-quant/data_source",
+    "junie.onboarding.icon.badge.shown": "true",
+    "last_opened_file_path": "D:/proj/jue-quant",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "configurable.group.tools",
+    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
@@ -102,7 +79,6 @@
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <option name="SDK_HOME" value="$PROJECT_DIR$/.venv/Scripts/python.exe" />
-      <option name="SDK_NAME" value="Python 3.9 (jue-quant)" />
       <option name="WORKING_DIRECTORY" value="" />
       <option name="IS_MODULE_SDK" value="false" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
@@ -129,6 +105,8 @@
       <updated>1750908370702</updated>
       <workItem from="1750908374003" duration="744000" />
       <workItem from="1750914810212" duration="13576000" />
+      <workItem from="1750954076563" duration="314000" />
+      <workItem from="1750954875128" duration="954000" />
     </task>
     <servers />
   </component>
