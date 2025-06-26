@@ -1,25 +1,43 @@
-from commonLib import qs, ak, pd
+# concept_data.py
+from data_providers import get_data_provider
 from pyecharts.charts import TreeMap
 from pyecharts import options as opts
 # 1.下载https://github.com/pyecharts/pyecharts 2.封装输出到指定地址
 
+data_provider = get_data_provider()
 def get_concept_board_top10():
     """获取概念板块前十排名"""
-    return qs.realtime_data("概念板块").head(10)
+    if data_provider.__class__.__name__ == "QStockProvider":
+        df = data_provider.realtime_data(category="概念板块")
+        return df.head(10)
+    elif data_provider.__class__.__name__ == "AkShareProvider":
+        raise NotImplementedError("AkShare does not support realtime concept board yet.")
+    else:
+        raise NotImplementedError("Only qstock supports realtime concept data.")
+def get_concept_board_top10():
+    """获取概念板块前十排名"""
+    if data_provider.__class__.__name__ == "QStockProvider":
+        df = data_provider.realtime_data(category="概念板块")
+        return df.head(10)
+    elif data_provider.__class__.__name__ == "AkShareProvider":
+        # 如果需要支持 akshare 获取实时概念板块，可以在这里添加对应方法
+        raise NotImplementedError("AkShare does not support realtime concept board yet.")
+    else:
+        raise NotImplementedError("Only qstock supports realtime concept data.")
 
 def build_treemap_data(df):
     """构建树状图所需数据"""
     data = []
     for index, row in df.iterrows():
-        # 定义echarts数据格式
         item = {
             "value": row['涨幅'],
             "name": row['名称'],
             "path": row['名称']
         }
-        # 获取板块排名前五的个股
-        board_concept_cons_em_df = ak.stock_board_concept_cons_em(symbol=row['名称']).sort_values(by='涨跌幅',
-                                                                                              ascending=False).head(5)
+
+        # 使用统一接口获取板块下个股
+        board_concept_cons_em_df = data_provider.get_concept_stocks(concept_name=row['名称'])
+
         children = []
         for b_index, b_row in board_concept_cons_em_df.iterrows():
             children_item = {

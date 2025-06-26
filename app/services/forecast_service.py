@@ -1,15 +1,14 @@
 from prophet import Prophet
-import yfinance as yf
+from data_providers import get_data_provider
+data_provider = get_data_provider('yfinance')  # 使用 yfinance 数据源
 import pandas as pd
-
 def predict_stock_price(symbol: str, years: int = 1):
     START = "2015-01-01"
     TODAY = pd.to_datetime("today").strftime("%Y-%m-%d")
 
-    data = yf.download(symbol, start=START, end=TODAY)
-    data.reset_index(inplace=True)
+    df = data_provider.get_stock_history(code=symbol, start_date=START, end_date=TODAY)
 
-    df_train = data[["Date", "Close"]]
+    df_train = df[["Date", "Close"]]
     df_train = df_train.rename(columns={"Date": "ds", "Close": "y"})
 
     model = Prophet()

@@ -1,5 +1,5 @@
-from jqdatasdk import *
-auth('juemuel','Jue1029quant') #账号是申请时所填写的手机号；密码为聚宽官网登录密码
+# from jqdatasdk import *
+# auth('juemuel','Jue1029quant') #账号是申请时所填写的手机号；密码为聚宽官网登录密码
 
 
 # 东方财富：https://www.eastmoney.com/

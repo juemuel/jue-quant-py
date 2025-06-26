@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="9e300185-fdce-4341-9a9e-fbf5f5fc82ec" name="更改" comment="">
+      <change afterPath="$PROJECT_DIR$/data_providers/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/data_providers/akshare.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/data_providers/qstock.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/data_providers/tushare.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/data_providers/yfinance.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/.env" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/config.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/core/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/routers/router.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/core/exception_handler.py" beforeDir="false" afterPath="$PROJECT_DIR$/core/exception_handler.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/core/logger.py" beforeDir="false" afterPath="$PROJECT_DIR$/core/logger.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/core/middleware.py" beforeDir="false" afterPath="$PROJECT_DIR$/core/middleware.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/core/response.py" beforeDir="false" afterPath="$PROJECT_DIR$/core/response.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/routers/concepts/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/concept_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/routers/concepts/market_concept.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/routers/data/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/common/settings.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/routers/data/macro.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/routers/data/stock.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/routers/prediction/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/core/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/routers/prediction/forecast.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/data_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/data_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/forecast_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/forecast_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/macro_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/macro_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/common/jqdatasdk.py" beforeDir="false" afterPath="$PROJECT_DIR$/common/jqdatasdk.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/common/response.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/common/utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/common/utils.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/commonLib.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data_source/concept_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_source/concept_data.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="FlaskConsoleOptions" custom-start-script="import sys; print('Python %s on %s' % (sys.version, sys.platform)); sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;from flask.cli import ScriptInfo, NoAppException&#10;for module in [&quot;main.py&quot;, &quot;wsgi.py&quot;, &quot;app.py&quot;]:&#10;    try: locals().update(ScriptInfo(app_import_path=module, create_app=None).load_app().make_shell_context()); print(&quot;\nFlask App: %s&quot; % app.import_name); break&#10;    except NoAppException: pass">
+    <envs>
+      <env key="FLASK_APP" value="app" />
+    </envs>
+    <option name="myCustomStartScript" value="import sys; print('Python %s on %s' % (sys.version, sys.platform)); sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;from flask.cli import ScriptInfo, NoAppException&#10;for module in [&quot;main.py&quot;, &quot;wsgi.py&quot;, &quot;app.py&quot;]:&#10;    try: locals().update(ScriptInfo(app_import_path=module, create_app=None).load_app().make_shell_context()); print(&quot;\nFlask App: %s&quot; % app.import_name); break&#10;    except NoAppException: pass" />
+    <option name="myEnvs">
+      <map>
+        <entry key="FLASK_APP" value="app" />
+      </map>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;customColor&quot;: &quot;&quot;,
+  &quot;associatedIndex&quot;: 1
+}</component>
+  <component name="ProjectId" id="2z1pKGFBZXkK8LcrVYLrnwfkeSJ" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "FastAPI.未命名.executor": "Run",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "dart.analysis.tool.window.visible": "false",
+    "git-widget-placeholder": "master",
+    "last_opened_file_path": "C:/proj/ELSE/SELF/jue-quant/data_source",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "configurable.group.tools",
+    "vue.rearranger.settings.migration": "true"
+  }
+}]]></component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\proj\ELSE\SELF\jue-quant" />
+    </key>
+  </component>
+  <component name="RunManager">
+    <configuration name="未命名" type="Python.FastAPI" nameIsGenerated="true">
+      <option name="file" value="C:\proj\ELSE\SELF\jue-quant\app\main.py" />
+      <module name="jue-quant" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="$PROJECT_DIR$/.venv/Scripts/python.exe" />
+      <option name="SDK_NAME" value="Python 3.9 (jue-quant)" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="launchJavascriptDebuger" value="false" />
+      <method v="2" />
+    </configuration>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-js-predefined-d6986cc7102b-b26f3e71634d-JavaScript-PY-251.26094.141" />
+        <option value="bundled-python-sdk-9f8e2b94138c-36ea0e71a18c-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-251.26094.141" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="默认任务">
+      <changelist id="9e300185-fdce-4341-9a9e-fbf5f5fc82ec" name="更改" comment="" />
+      <created>1750908370702</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1750908370702</updated>
+      <workItem from="1750908374003" duration="744000" />
+      <workItem from="1750914810212" duration="13576000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/jue_quant$.coverage" NAME="未命名 覆盖结果" MODIFIED="1750921620942" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
+  </component>
+</project>

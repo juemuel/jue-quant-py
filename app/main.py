@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 from pydantic import BaseModel  # 数据验证库
-from app.core.middleware import add_middlewares
-from app.core.logger import setup_logger
-from app.core.exception_handler import add_exception_handlers
+from core.middleware import add_middlewares
+from core.logger import setup_logger
+from core.exception_handler import add_exception_handlers
+from common.settings import *
+from app.routers import router
 
 setup_logger()  # 初始化日志系统
 app = FastAPI(title="Quant Data API")
@@ -10,14 +12,7 @@ add_middlewares(app)
 add_exception_handlers(app)  # 添加异常处理器
 
 # 注册所有子路由
-from app.routers.data.stock import router as stock_router
-from app.routers.data.macro import router as macro_router
-from app.routers.concepts.market_concept import router as concept_router
-from app.routers.prediction.forecast import router as forecast_router
-app.include_router(stock_router)
-app.include_router(macro_router)
-app.include_router(concept_router)
-app.include_router(forecast_router)
+app.include_router(router)
 
 # Swagger UI：访问 http://127.0.0.1:8000/docs
 # ReDoc：访问 http://127.0.0.1:8000/redoc

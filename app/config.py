@@ -1,15 +1,9 @@
+# app/config.py
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 class Config:
-    ENV = 'development'
-    DEBUG = False
-    TESTING = False
-
-class DevelopmentConfig(Config):
-    ENV = 'development'
-    DEBUG = True
-
-class TestingConfig(Config):
-    ENV = 'test'
-    TESTING = True
-
-class ProductionConfig(Config):
-    ENV = 'production'
+    DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+    DATA_PROVIDER = os.getenv("DATA_PROVIDER", "akshare")
