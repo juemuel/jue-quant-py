@@ -5,11 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="9e300185-fdce-4341-9a9e-fbf5f5fc82ec" name="更改" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/jue-quant.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/jue-quant.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app.log" beforeDir="false" afterPath="$PROJECT_DIR$/app.log" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -56,7 +52,7 @@
     "dart.analysis.tool.window.visible": "false",
     "git-widget-placeholder": "master",
     "junie.onboarding.icon.badge.shown": "true",
-    "last_opened_file_path": "D:/proj/jue-quant",
+    "last_opened_file_path": "C:/proj/ELSE/SELF/py-fastapi-demo",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -107,6 +103,7 @@
       <workItem from="1750914810212" duration="13576000" />
       <workItem from="1750954076563" duration="314000" />
       <workItem from="1750954875128" duration="954000" />
+      <workItem from="1750997951381" duration="421000" />
     </task>
     <servers />
   </component>
