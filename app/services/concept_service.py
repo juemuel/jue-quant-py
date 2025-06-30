@@ -1,6 +1,10 @@
 # app/services/concept_service.py
-from data_source.concept_data import get_concept_board_top10
+# from data_source.concept_data import get_concept_board_top10
+from prophet import Prophet
+from data_providers import get_data_provider
+data_provider = get_data_provider('yfinance')  # 使用 yfinance 数据源
 import logging
+
 logger = logging.getLogger(__name__)
 def get_concept_board_top10(top_n=10, filter_by=None):
     """
@@ -10,7 +14,7 @@ def get_concept_board_top10(top_n=10, filter_by=None):
     :return: DataFrame
     """
     logger.info(f"Fetching top {top_n} concept boards")
-    df = get_concept_board_top10()
+    df = data_provider.get_concept_board_top10()
 
     if filter_by:
         # 示例：filter_by = {'涨幅': 5}

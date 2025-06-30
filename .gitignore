@@ -10,3 +10,5 @@
 /app/services/__pycache__
 /data_source/__pycache__
 /.idea
+/app/routers/__pycache__
+*.pyc
