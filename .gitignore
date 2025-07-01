@@ -12,3 +12,4 @@
 /.idea
 /app/routers/__pycache__
 *.pyc
+/.venv

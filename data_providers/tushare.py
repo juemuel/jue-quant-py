@@ -17,8 +17,7 @@ class TushareProvider:
         :param end_date: 结束日期，格式 'YYYYMMDD'
         :return: DataFrame
         """
-        print(
-            f"[Provider]source={source}, code={code}, market={market}, start_date={start_date}, end_date={end_date}")
+        print(f"[Provider]source={source}, code={code}, market={market}, start_date={start_date}, end_date={end_date}")
         try:
             df = self.pro.daily(ts_code=code, start_date=start_date, end_date=end_date)
             if df.empty:

@@ -14,8 +14,7 @@ class YFinanceProvider:
         :param end_date: 结束日期，格式 "YYYY-MM-DD"
         :return: DataFrame
         """
-        print(
-            f"[Provider]source={source}, code={code}, market={market}, start_date={start_date}, end_date={end_date}")
+        print(f"[Provider]source={source}, code={code}, market={market}, start_date={start_date}, end_date={end_date}")
         try:
             data = yf.download(code, start=start_date, end=end_date)
             data.reset_index(inplace=True)
