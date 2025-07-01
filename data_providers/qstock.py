@@ -16,11 +16,15 @@ class QStockProvider:
         """
         print(
             f"[Provider]source={source}, code={code}, market={market}, start_date={start_date}, end_date={end_date}")
-        df = qs.get_data(code_list=code, start=start_date, end=end_date)
-        if isinstance(df, dict):
-            df = pd.DataFrame(df)
-        return df
-
+        try:
+            df = qs.get_data(code_list=code, start=start_date, end=end_date)
+            if isinstance(df, dict):
+                df = pd.DataFrame(df)
+            if df.empty:
+                raise ValueError(f"从 qstock 获取股票 {code} 的数据为空")
+            return df
+        except Exception as e:
+            raise RuntimeError(f"从 qstock 获取股票 {code} 数据失败: {str(e)}") from e
     def get_macro_gdp_data(self, source):
         """
         获取宏观GDP数据（QStock 暂无直接 GDP 数据接口）
@@ -28,7 +32,11 @@ class QStockProvider:
         :return: DataFrame or None + 异常提示
         """
         print(f"[Provider]source={source}")
-        raise NotImplementedError("QStock does not provide direct macro GDP data.")
+        try:
+            # yfinance 不直接支持宏观 GDP 数据，模拟一个错误
+            raise NotImplementedError("QStock暂不支持获取宏观GDP数据")
+        except Exception as e:
+            raise RuntimeError(f"从 QStock 获取 GDP 数据失败: {str(e)}") from e
 
     def realtime_data(self, category="概念板块"):
         """

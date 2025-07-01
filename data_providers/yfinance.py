@@ -16,9 +16,14 @@ class YFinanceProvider:
         """
         print(
             f"[Provider]source={source}, code={code}, market={market}, start_date={start_date}, end_date={end_date}")
-        data = yf.download(code, start=start_date, end=end_date)
-        data.reset_index(inplace=True)
-        return data
+        try:
+            data = yf.download(code, start=start_date, end=end_date)
+            data.reset_index(inplace=True)
+            if data.empty:
+                raise ValueError(f"从 yfinance 获取股票 {code} 的数据为空")
+            return data
+        except Exception as e:
+            raise RuntimeError(f"从 yfinance 获取股票 {code} 数据失败: {str(e)}") from e
     def get_macro_gdp_data(self, source):
         """
         获取宏观GDP数据（yfinance 不直接支持 GDP 数据）
@@ -26,5 +31,9 @@ class YFinanceProvider:
         :return: DataFrame or None + 异常提示
         """
         print(f"[Provider]source={source}")
-        raise NotImplementedError("yfinance does not support macro GDP data directly.")
+        try:
+            # yfinance 不直接支持宏观 GDP 数据，模拟一个错误
+            raise NotImplementedError("yfinance 不支持直接获取宏观GDP数据")
+        except Exception as e:
+            raise RuntimeError(f"从 yfinance 获取 GDP 数据失败: {str(e)}") from e
 

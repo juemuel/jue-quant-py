@@ -3173,3 +3173,9 @@ RuntimeError: 从 tushare 获取 GDP 数据失败: 抱歉，您没有接口访�
 2025-07-01 15:16:41.007 | ERROR    | app.services.macro_service:get_gdp_data:29 - 获取宏观GDP数据失败: 从 tushare 获取 GDP 数据失败: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
 2025-07-01 15:17:23.550 | INFO     | app.services.macro_service:get_gdp_data:12 - [Bridge]获取gdp数据并标准化输出格式 from tushare
 2025-07-01 15:17:23.716 | ERROR    | app.services.macro_service:get_gdp_data:29 - 获取宏观GDP数据失败: 从 tushare 获取 GDP 数据失败: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+2025-07-01 16:52:56.515 | INFO     | app.services.macro_service:get_gdp_data:12 - [Bridge]获取gdp数据并标准化输出格式 from qstock
+2025-07-01 16:52:56.519 | ERROR    | app.services.macro_service:get_gdp_data:29 - 获取宏观GDP数据失败: QStock does not provide direct macro GDP data.
+2025-07-01 17:29:23.413 | INFO     | app.services.macro_service:get_gdp_data:13 - [Bridge]获取gdp数据并标准化输出格式 from qstock
+2025-07-01 17:29:23.414 | ERROR    | app.services.macro_service:get_gdp_data:30 - 获取宏观GDP数据失败: 从 QStock 获取 GDP 数据失败: QStock暂不支持获取宏观GDP数据
+2025-07-01 17:29:30.606 | INFO     | app.services.data_service:get_stock_history:18 - [Bridge]获取股票历史行情数据并标准化输出格式 for 000001.SH from qstock
+2025-07-01 17:29:30.708 | ERROR    | app.services.data_service:get_stock_history:38 - Missing '日期' column from qstock data

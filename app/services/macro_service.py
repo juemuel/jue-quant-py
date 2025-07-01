@@ -8,6 +8,7 @@ logging.getLogger('uvicorn').handlers = []
 def get_gdp_data(source="akshare"):
     """
     获取国内GDP数据
+    :param source: 数据源名称（akshare/tushare/efinance/qstock）
     """
     logger.info(f"[Bridge]获取gdp数据并标准化输出格式 from {source}")
 
