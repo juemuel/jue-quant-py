@@ -1,12 +1,8 @@
 from fastapi import FastAPI
 from pydantic import BaseModel  # 数据验证库
 from core.middleware import add_middlewares
-from core.logger import setup_logger
 from core.exception_handler import add_exception_handlers
-from common.settings import *
 from app.routers import router
-
-setup_logger()  # 初始化日志系统
 app = FastAPI(title="Quant Data API")
 add_middlewares(app)
 add_exception_handlers(app)  # 添加异常处理器

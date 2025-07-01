@@ -4,18 +4,31 @@ import pandas as pd
 
 
 class QStockProvider:
-    def get_stock_history(self, code, start_date=None, end_date=None):
+    def get_stock_history(self, source, code, market, start_date=None, end_date=None):
         """
         获取股票历史行情（默认日线）
+        :param source: 数据源名称（如 'qstock'）
         :param code: 股票代码，如 '000001'
+        :param market: 市场代码（如 'SH'/'SZ'），此处未使用
         :param start_date: 开始日期，格式 'YYYYMMDD'
         :param end_date: 结束日期，格式 'YYYYMMDD'
         :return: DataFrame
         """
+        print(
+            f"[Provider]source={source}, code={code}, market={market}, start_date={start_date}, end_date={end_date}")
         df = qs.get_data(code_list=code, start=start_date, end=end_date)
         if isinstance(df, dict):
             df = pd.DataFrame(df)
         return df
+
+    def get_macro_gdp_data(self, source):
+        """
+        获取宏观GDP数据（QStock 暂无直接 GDP 数据接口）
+        :param source: 数据源名称（如 'qstock'）
+        :return: DataFrame or None + 异常提示
+        """
+        print(f"[Provider]source={source}")
+        raise NotImplementedError("QStock does not provide direct macro GDP data.")
 
     def realtime_data(self, category="概念板块"):
         """

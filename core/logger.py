@@ -1,18 +1,27 @@
-# core/logger.py
-import logging
+import sys
+from loguru import logger
 import os
-from logging.handlers import RotatingFileHandler
 
-def setup_logger():
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+# 清除默认 handler
+logger.remove()
 
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# 添加控制台输出
+logger.add(
+    sink=sys.stderr,
+    level="DEBUG",
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level}</level> | {name}:{function}:{line} | <level>{message}</level>"
+)
 
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
+# 同时写入日志文件（可选）
+logger.add(
+    sink="app.log",
+    level="DEBUG",
+    rotation="10 MB",
+    retention="5 days"
+)
 
-    file_handler = RotatingFileHandler("app.log", maxBytes=10*1024*1024, backupCount=5)
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
+# 将 catch 显式绑定到 logger 对象
+catch = logger.catch
+
+# 导出 logger 和 catch
+__all__ = ['logger', 'catch']

@@ -1,8 +1,15 @@
-from prophet import Prophet
+import logging
+from core.logger import logger
 from data_providers import get_data_provider
-data_provider = get_data_provider('yfinance')  # 使用 yfinance 数据源
 import pandas as pd
+from prophet import Prophet
+data_provider = get_data_provider('yfinance')  # 使用 yfinance 数据源
+# 关闭 FastAPI/Uvicorn 自带 logging 输出干扰
+logging.getLogger('uvicorn').handlers = []
+
+@logger.catch
 def predict_stock_price(symbol: str, years: int = 1):
+    logger.info("Predicting stock price for symbol: %s", symbol)
     START = "2015-01-01"
     TODAY = pd.to_datetime("today").strftime("%Y-%m-%d")
 

@@ -1,11 +1,11 @@
-# app/services/concept_service.py
-# from data_source.concept_data import get_concept_board_top10
-from prophet import Prophet
+import logging
+from core.logger import logger
 from data_providers import get_data_provider
 data_provider = get_data_provider('yfinance')  # 使用 yfinance 数据源
-import logging
+# 关闭 FastAPI/Uvicorn 自带 logging 输出干扰
+logging.getLogger('uvicorn').handlers = []
 
-logger = logging.getLogger(__name__)
+@logger.catch
 def get_concept_board_top10(top_n=10, filter_by=None):
     """
     获取概念板块排名（带参数支持）
