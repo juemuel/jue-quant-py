@@ -1,32 +1,27 @@
-# app/routers/router.py
-import logging
 from core.logger import logger
 from fastapi import APIRouter
 from app.services import data_service, macro_service, concept_service, forecast_service
 from core.response import success, error
 router = APIRouter()
-# 关闭 FastAPI/Uvicorn 自带 logging 输出干扰
-logging.getLogger('uvicorn').handlers = []
 
 # --- 股票数据相关 ---
 @router.get("/data/index", tags=["Data"])
 async def get_history_data(source: str = "akshare", market: str = "SH", code: str = "000001", start_date: str = None, end_date: str = None):
-    try:
-        df = data_service.get_stock_history(source=source, code=code, market=market, start_date=start_date, end_date=end_date)
-        return success(data=df, message="Stock history data fetched successfully")
-    except Exception as e:
-        return error(message=str(e), status=500)
+    result = data_service.get_stock_history(source=source, code=code, market=market, start_date=start_date,
+                                        end_date=end_date)
+    logger.info(f"[Router]result{result}")
+    if result.get("status") == "success":
+        return success(data=result.get("data"), message=result.get("message", "Success"))
+    return error(message=result.get("message", "Unknown error"))
 
 # --- 宏观数据相关 ---
 @router.get("/macro/gdp", tags=["Macro"])
 async def get_gdp_data(source: str = "akshare"):
-    try:
-        data = macro_service.get_gdp_data(source=source)
-        return success(data=data, message="GDP data fetched successfully")
-    except Exception as e:
-        # 明确返回 error() 响应
-        return error(message=str(e), status=500)
-
+    result = macro_service.get_gdp_data(source=source)
+    logger.info(f"[Router]result{result}")
+    if result.get("status") == "success":
+        return success(data=result.get("data"), message=result.get("message", "Success"))
+    return error(message=result.get("message", "Unknown error"))
 
 # --- 概念板块相关 ---
 @router.get("/concepts/boards", tags=["Concepts"])

@@ -1,13 +1,8 @@
-# data_providers/yfinance.py
 import yfinance as yf
 import pandas as pd
-# 关闭 FastAPI/Uvicorn 自带 logging 输出干扰
-import logging
+from core.logger import logger
 
-from core.exceptions import DataEmptyError
-from core.logger import logger, catch
-logging.getLogger('uvicorn').handlers = []
-
+# 似乎要翻墙
 class YFinanceProvider:
     def get_stock_history(self, source, code, market, start_date=None, end_date=None):
         """

@@ -1,13 +1,16 @@
+import sys
 from fastapi import FastAPI
 from pydantic import BaseModel  # 数据验证库
 from core.middleware import add_middlewares
 from core.exception_handler import add_exception_handlers
 from app.routers import router
+from core.logger import logger
+# 创建 FastAPI 实例
 app = FastAPI(title="Quant Data API")
+# 添加中间件和异常处理
 add_middlewares(app)
-add_exception_handlers(app)  # 添加异常处理器
-
-# 注册所有子路由
+add_exception_handlers(app)
+# 注册所有路由
 app.include_router(router)
 
 # Swagger UI：访问 http://127.0.0.1:8000/docs

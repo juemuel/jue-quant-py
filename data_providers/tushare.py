@@ -1,17 +1,13 @@
-# data_providers/tushare.py
 import tushare as ts
-from core.exception_handler import DataEmptyError, DataAccessDeniedError
 import pandas as pd
-# 关闭 FastAPI/Uvicorn 自带 logging 输出干扰
-import logging
-from core.logger import logger, catch
+from core.logger import logger
 
-logging.getLogger('uvicorn').handlers = []
 class TushareProvider:
     def __init__(self):
         ts.set_token("a1533fd58c006f92b96286c3af7f044ad853d51cf2dec60e8f32b33e")
         self.pro = ts.pro_api()
 
+    # 不可用
     def get_stock_history(self, source, code, market, start_date=None, end_date=None):
         """
         获取股票历史行情（默认日线）
@@ -36,7 +32,8 @@ class TushareProvider:
         :return: DataFrame
         """
         # Tushare GDP 数据接口示例：国家统计局宏观经济数据
-        print(f"[Provider]source={source}")
+        logger.info(f"[Provider]source={source}")
         df = self.pro.cn_gdp(year="", field="")
-        print(f"[Provider]列名: {df.columns.tolist()}")
+        logger.info(f"[Provider]列名: {df.columns.tolist()}")
+        logger.info(f"[Provider]行数: {len(df)}")
         return df

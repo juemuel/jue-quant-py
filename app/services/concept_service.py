@@ -1,8 +1,5 @@
-import logging
 from core.logger import logger
 from data_providers import get_data_provider
-# 关闭 FastAPI/Uvicorn 自带 logging 输出干扰
-logging.getLogger('uvicorn').handlers = []
 
 @logger.catch
 def get_concept_board_top10(source="yfinance", top_n=10, filter_by=None):

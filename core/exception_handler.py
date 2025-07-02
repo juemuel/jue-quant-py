@@ -3,6 +3,13 @@ from fastapi.responses import JSONResponse
 from core.exceptions import DataProviderError, DataEmptyError, DataFieldMissingError, DataAccessDeniedError, InvalidParameterError
 
 def add_exception_handlers(app: FastAPI):
+    @app.exception_handler(Exception)
+    async def custom_global_exception_handler(request: Request, exc: Exception):
+        # 返回简洁的错误响应，不包含 traceback
+        return JSONResponse(
+            status_code=500,
+            content={"message": "An internal server error occurred. Please contact the administrator."}
+        )
     @app.exception_handler(DataEmptyError)
     async def handle_data_empty_error(request: Request, exc: DataEmptyError):
         return JSONResponse(

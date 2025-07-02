@@ -1,13 +1,8 @@
-# data_providers/akshare.py
 import akshare as ak
 import pandas as pd
-# 关闭 FastAPI/Uvicorn 自带 logging 输出干扰
-import logging
-
-from core.exceptions import DataEmptyError
-from core.logger import logger, catch
-logging.getLogger('uvicorn').handlers = []
+from core.logger import logger
 class AkShareProvider:
+    # 可用
     def get_stock_history(self, source, code, market, start_date=None, end_date=None):
         """
         获取股票历史行情（默认日线）
@@ -31,6 +26,8 @@ class AkShareProvider:
         """
         print(f"[Provider]source={source}")
         df = ak.macro_china_gdp()
+        logger.info(f"[Provider]列名: {df.columns.tolist()}")
+        logger.info(f"[Provider]行数: {len(df)}")
         return df
     def get_concept_stocks(self, concept_name):
         df = ak.stock_board_concept_cons_em(symbol=concept_name).sort_values(by='涨跌幅', ascending=False).head(5)

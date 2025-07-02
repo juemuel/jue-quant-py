@@ -1,14 +1,9 @@
-# data_providers/qstock.py
 import qstock as qs
 import pandas as pd
-# 关闭 FastAPI/Uvicorn 自带 logging 输出干扰
-import logging
-
-from core.exceptions import DataEmptyError
-from core.logger import logger, catch
-logging.getLogger('uvicorn').handlers = []
+from core.logger import logger
 
 class QStockProvider:
+    # 不可用
     def get_stock_history(self, source, code, market, start_date=None, end_date=None):
         """
         获取股票历史行情（默认日线）
