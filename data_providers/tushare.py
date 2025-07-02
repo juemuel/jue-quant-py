@@ -1,7 +1,12 @@
 # data_providers/tushare.py
 import tushare as ts
+from core.exception_handler import DataEmptyError, DataAccessDeniedError
 import pandas as pd
+# 关闭 FastAPI/Uvicorn 自带 logging 输出干扰
+import logging
+from core.logger import logger, catch
 
+logging.getLogger('uvicorn').handlers = []
 class TushareProvider:
     def __init__(self):
         ts.set_token("a1533fd58c006f92b96286c3af7f044ad853d51cf2dec60e8f32b33e")
@@ -17,14 +22,12 @@ class TushareProvider:
         :param end_date: 结束日期，格式 'YYYYMMDD'
         :return: DataFrame
         """
-        print(f"[Provider]source={source}, code={code}, market={market}, start_date={start_date}, end_date={end_date}")
-        try:
-            df = self.pro.daily(ts_code=code, start_date=start_date, end_date=end_date)
-            if df.empty:
-                raise ValueError(f"从 tushare 获取股票 {code} 的数据为空")
-            return df
-        except Exception as e:
-            raise RuntimeError(f"从 tushare 获取股票 {code} 数据失败: {str(e)}") from e
+        logger.info(f"[Provider]source={source}, code={code}, market={market}, start_date={start_date}, end_date={end_date}")
+        ts_code = f"{code}.{market}"
+        df = self.pro.daily(ts_code=ts_code, start_date=start_date, end_date=end_date)
+        logger.info(f"[Provider]列名: {df.columns.tolist()}")
+        logger.info(f"[Provider]行数: {len(df)}")
+        return df
 
     def get_macro_gdp_data(self, source):
         """
@@ -34,10 +37,6 @@ class TushareProvider:
         """
         # Tushare GDP 数据接口示例：国家统计局宏观经济数据
         print(f"[Provider]source={source}")
-        try:
-            df = self.pro.cn_gdp(year="", field="")
-            if df.empty:
-                raise ValueError("从 tushare 获取 GDP 数据为空")
-            return df
-        except Exception as e:
-            raise RuntimeError(f"从 tushare 获取 GDP 数据失败: {str(e)}") from e
+        df = self.pro.cn_gdp(year="", field="")
+        print(f"[Provider]列名: {df.columns.tolist()}")
+        return df

@@ -1,6 +1,5 @@
 import sys
 from loguru import logger
-import os
 
 # 清除默认 handler
 logger.remove()

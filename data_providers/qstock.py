@@ -1,7 +1,12 @@
 # data_providers/qstock.py
 import qstock as qs
 import pandas as pd
+# 关闭 FastAPI/Uvicorn 自带 logging 输出干扰
+import logging
 
+from core.exceptions import DataEmptyError
+from core.logger import logger, catch
+logging.getLogger('uvicorn').handlers = []
 
 class QStockProvider:
     def get_stock_history(self, source, code, market, start_date=None, end_date=None):
@@ -14,16 +19,13 @@ class QStockProvider:
         :param end_date: 结束日期，格式 'YYYYMMDD'
         :return: DataFrame
         """
-        print(f"[Provider]source={source}, code={code}, market={market}, start_date={start_date}, end_date={end_date}")
-        try:
-            df = qs.get_data(code_list=code, start=start_date, end=end_date)
-            if isinstance(df, dict):
-                df = pd.DataFrame(df)
-            if df.empty:
-                raise ValueError(f"从 qstock 获取股票 {code} 的数据为空")
-            return df
-        except Exception as e:
-            raise RuntimeError(f"从 qstock 获取股票 {code} 数据失败: {str(e)}") from e
+        logger.info(f"[Provider]source={source}, code={code}, market={market}, start_date={start_date}, end_date={end_date}")
+        df = qs.get_data(code_list=code, start=start_date, end=end_date)
+        if isinstance(df, dict):
+            df = pd.DataFrame(df)
+        logger.info(f"[Provider]列名: {df.columns.tolist()}")
+        logger.info(f"[Provider]行数: {len(df)}")
+        return df
     def get_macro_gdp_data(self, source):
         """
         获取宏观GDP数据（QStock 暂无直接 GDP 数据接口）
@@ -36,7 +38,6 @@ class QStockProvider:
             raise NotImplementedError("QStock暂不支持获取宏观GDP数据")
         except Exception as e:
             raise RuntimeError(f"从 QStock 获取 GDP 数据失败: {str(e)}") from e
-
     def realtime_data(self, category="概念板块"):
         """
         获取实时数据（如概念板块、行业等）
