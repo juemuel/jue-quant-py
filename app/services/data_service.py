@@ -6,7 +6,8 @@ def get_stock_history(source="akshare", code="000001", market="SH", start_date: 
     获取股票历史行情数据并标准化输出格式
     :param source: 数据源名称（akshare/tushare/efinance/qstock）
                 akshare不支持外网
-
+                tuashre没有日期
+                qsotck必须外网
     :param code: 股票代码
     :param market: 市场（SH/SZ）
     :param start_date：开始日期
