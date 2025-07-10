@@ -4,6 +4,18 @@ from core.logger import logger
 
 # 似乎要翻墙
 class YFinanceProvider:
+    def get_all_stocks(self):
+        """
+        获取美股股票列表（示例）
+        :return: DataFrame 包含 ['code', 'name']
+        """
+        logger.info(f"[Provider]source={self.__class__.__name__}")
+        # 这里仅提供一个示例，实际使用时需从 yfinance 获取完整列表
+        tickers = yf.Tickers(['AAPL', 'GOOGL', 'MSFT', 'AMZN'])
+        df = pd.DataFrame([(ticker.ticker, ticker.info['longName']) for ticker in tickers.tickers],
+                          columns=['code', 'name'])
+        return df[['code', 'name']]
+
     def get_stock_history(self, source, code, market, start_date=None, end_date=None):
         """
         使用 yfinance 获取股票历史行情数据

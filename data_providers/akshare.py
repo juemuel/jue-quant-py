@@ -3,6 +3,32 @@ import pandas as pd
 from core.logger import logger
 class AkShareProvider:
     # 可用
+    def get_all_stocks(self, market=None):
+        """
+        获取股票列表，支持按市场筛选
+        :param market: 'SH'（上交所）, 'SZ'（深交所）, 'BJ'（北交所）, 'CY'（创业板）, 'KE'（科创板）
+        :return: DataFrame ['code', 'name']
+        """
+        logger.info(f"[Provider]source={self.__class__.__name__}, market={market}")
+
+        if market == "SH":
+            df = ak.stock_info_sh_name_code()  # 上证市场专用接口
+        elif market == "SZ":
+            df = ak.stock_info_sz_name_code()  # 深圳市场专用接口
+        elif market == "BJ":
+            df = ak.stock_info_bj_name_code()  # 北交所专用接口
+        else:
+            # 默认获取A股所有股票，并做进一步筛选
+            df = ak.stock_info_a_code_name()
+            if market == "KE":  # 科创板
+                df = df[df['code'].astype(str).str.startswith('68')]
+            elif market == "CY":  # 创业板
+                df = df[df['code'].astype(str).str.startswith('30')]
+
+        df['code'] = df['code'].astype(str).str.zfill(6)
+        df['name'] = df['name']
+        return df[['code', 'name']]
+    # 可用
     def get_stock_history(self, source, code, market, start_date=None, end_date=None):
         """
         获取股票历史行情（默认日线）

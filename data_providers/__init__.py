@@ -1,7 +1,9 @@
+from .juejinquant import JueJinQuantProvider
 from .tushare import TushareProvider
 from .akshare import AkShareProvider
 from .qstock import QStockProvider
 from .yfinance import YFinanceProvider  # 新增
+from .juejinquant import JueJinQuantProvider
 
 default_provider = 'akshare'
 
@@ -9,7 +11,8 @@ provider_map = {
     'tushare': TushareProvider,
     'akshare': AkShareProvider,
     'qstock': QStockProvider,
-    'yfinance': YFinanceProvider  # 新增
+    'yfinance': YFinanceProvider,
+    'juejinquant': JueJinQuantProvider
 }
 
 def get_data_provider(name: str = default_provider):

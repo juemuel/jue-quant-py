@@ -3,6 +3,17 @@ import pandas as pd
 from core.logger import logger
 
 class QStockProvider:
+    def get_all_stocks(self):
+        """
+        获取所有股票列表
+        :return: DataFrame 包含 ['code', 'name']
+        """
+        logger.info(f"[Provider]source={self.__class__.__name__}")
+        df = qs.get_stock_list()
+        df['code'] = df['code'].astype(str).str.zfill(6)
+        df['name'] = df['name']
+        return df[['code', 'name']]
+
     # 不可用
     def get_stock_history(self, source, code, market, start_date=None, end_date=None):
         """

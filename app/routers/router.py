@@ -4,6 +4,19 @@ from app.services import data_service, macro_service, concept_service, forecast_
 from core.response import success, error
 router = APIRouter()
 
+# 新增接口路由
+@router.get("/stocks/all", tags=["Data"])
+async def get_all_stocks_api(source: str = "akshare", market: str = None):
+    """
+    获取所有股票列表
+    :param source: 数据源名称（akshare/tushare/efinance/qstock）
+    :return: 股票列表
+    """
+    result = data_service.get_all_stocks(source=source, market=market)
+    if result.get("status") == "success":
+        return success(data=result.get("data"), message=result.get("message", "Success"))
+    return error(message=result.get("message", "Unknown error"))
+
 # --- 股票数据相关 ---
 @router.get("/data/index", tags=["Data"])
 async def get_history_data(source: str = "akshare", market: str = "SH", code: str = "000001", start_date: str = None, end_date: str = None):
