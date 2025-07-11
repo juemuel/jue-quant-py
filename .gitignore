@@ -3,13 +3,8 @@
 */__pycache__
 **/__pycache__
 **/**/__pycache__
-/app/__pycache__
-/app/__pycache__
-/app/__pycache__
-/app/__pycache__
 /app/services/__pycache__
 /data_source/__pycache__
-/app/routers/__pycache__
 *.pyc
 # Editors
 .idea
