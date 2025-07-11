@@ -1,10 +1,12 @@
 import tushare as ts
 import pandas as pd
 from core.logger import logger
-
+from dotenv import load_dotenv
+# 加载 .env 文件
+load_dotenv()
 class TushareProvider:
     def __init__(self):
-        ts.set_token("a1533fd58c006f92b96286c3af7f044ad853d51cf2dec60e8f32b33e")
+        ts.set_token("TUSHARE_TOKEN")
         self.pro = ts.pro_api()
 
     # 可用，1h限制

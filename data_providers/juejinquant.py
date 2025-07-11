@@ -2,7 +2,7 @@
 
 import pandas as pd
 from core.logger import logger
-
+from dotenv import load_dotenv
 class JueJinQuantProvider:
     def __init__(self):
         """
@@ -10,7 +10,7 @@ class JueJinQuantProvider:
         可以在这里加载 token 或连接远程服务
         """
         from gm.api import *
-        set_token("a7263f5d0383aa67d7400886b936b8e27f145c9e")
+        set_token("MYQUANT_TOKEN")
 
 
     def get_all_stocks(self, market=None):

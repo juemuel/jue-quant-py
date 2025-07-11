@@ -9,7 +9,21 @@
 /app/__pycache__
 /app/services/__pycache__
 /data_source/__pycache__
-/.idea
 /app/routers/__pycache__
 *.pyc
-/.venv
+# Editors
+.idea
+.vscode
+*.swp
+*.swo
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+.pipenv
+.pyenv
+
+app.log
+
