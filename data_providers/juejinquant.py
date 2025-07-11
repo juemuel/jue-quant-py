@@ -1,15 +1,17 @@
 # data_providers/juejinquant.py
+from gm.api import *
 
 import pandas as pd
 from core.logger import logger
 from dotenv import load_dotenv
+# 加载 .env 文件
+load_dotenv()
 class JueJinQuantProvider:
     def __init__(self):
         """
         初始化掘金量化客户端
         可以在这里加载 token 或连接远程服务
         """
-        from gm.api import *
         set_token("MYQUANT_TOKEN")
 
 
@@ -19,8 +21,7 @@ class JueJinQuantProvider:
         :return: DataFrame ['code', 'name']
         """
         logger.info(f"[Provider]{self.__class__.__name__} 正在获取所有股票...")
-        from gm.api import get_instruments
-        df = get_instruments(market="SHSE, SZSE", sec_type=33, df=True)  # 33 表示股票类型
+        df = get_instruments(exchanges="SHSE, SZSE", df=True)
         df.rename(columns={'symbol': 'code', 'name': 'name'}, inplace=True)
         return df[['code', 'name']]
 
