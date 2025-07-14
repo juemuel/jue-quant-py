@@ -11,22 +11,25 @@ class AkShareProvider:
         """
         logger.info(f"[Provider]source={self.__class__.__name__}, market={market}")
 
-        if market == "SH":
-            df = ak.stock_info_sh_name_code()  # 上证市场专用接口
-        elif market == "SZ":
-            df = ak.stock_info_sz_name_code()  # 深圳市场专用接口
-        elif market == "BJ":
-            df = ak.stock_info_bj_name_code()  # 北交所专用接口
+        df = ak.stock_info_a_code_name()
+        if market == "SH":  # 上交所
+            df = df[df['code'].astype(str).str.startswith('60')]
+        elif market == "SZ":  # 深交所（包括创业板）
+            df = df[df['code'].astype(str).str.contains(r'^(00|30)', regex=True)]
+        elif market == "BJ":  # 北交所（已校对）
+            df = df[df['code'].astype(str).str.contains(r'^(43|83|87|92)', regex=True)]
+        elif market == "KE":  # 科创板
+            df = df[df['code'].astype(str).str.startswith('68')]
+        elif market == "CY":  # 创业板
+            df = df[df['code'].astype(str).str.startswith('30')]
         else:
-            # 默认获取A股所有股票，并做进一步筛选
-            df = ak.stock_info_a_code_name()
-            if market == "KE":  # 科创板
-                df = df[df['code'].astype(str).str.startswith('68')]
-            elif market == "CY":  # 创业板
-                df = df[df['code'].astype(str).str.startswith('30')]
+            # 默认返回所有A股，不做额外处理
+            pass
+        # 剔除 ST 和 *ST 开头的股票
+        df = df[~df['name'].str.contains(r'\\*ST|^ST', regex=True)]
 
-        df['code'] = df['code'].astype(str).str.zfill(6)
-        df['name'] = df['name']
+        logger.info(f"[Provider]列名: {df.columns.tolist()}")
+        logger.info(f"[Provider]行数: {len(df)}")
         return df[['code', 'name']]
     # 可用
     def get_stock_history(self, source, code, market, start_date=None, end_date=None):

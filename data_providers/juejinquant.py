@@ -1,6 +1,8 @@
 # data_providers/juejinquant.py
-from gm.api import *
+import os
+import re
 
+from gm.api import *
 import pandas as pd
 from core.logger import logger
 from dotenv import load_dotenv
@@ -12,8 +14,9 @@ class JueJinQuantProvider:
         初始化掘金量化客户端
         可以在这里加载 token 或连接远程服务
         """
-        set_token("MYQUANT_TOKEN")
-
+        token = os.getenv("MYQUANT_TOKEN")  # 获取环境变量
+        logger.info(f"MYQUANT_TOKEN value: {token}")  # 打印 token 值
+        set_token(token)
 
     def get_all_stocks(self, market=None):
         """
@@ -21,8 +24,36 @@ class JueJinQuantProvider:
         :return: DataFrame ['code', 'name']
         """
         logger.info(f"[Provider]{self.__class__.__name__} 正在获取所有股票...")
-        df = get_instruments(exchanges="SHSE, SZSE", df=True)
-        df.rename(columns={'symbol': 'code', 'name': 'name'}, inplace=True)
+        # 动态选择交易所参数
+        exchanges = None
+        if market == "SH":
+            exchanges = "SHSE"
+        elif market == "SZ":
+            exchanges = "SZSE"
+        elif market == "BJ":
+            # 北交所无法直接指定交易所，暂设为 None 并后续通过 code 过滤
+            exchanges = None
+        else:
+            exchanges = "SHSE,SZSE"  # 默认获取沪深两市
+        df = get_instruments(exchanges=exchanges, sec_types="1",skip_suspended=True, skip_st=False, df=True)
+
+        # 提取纯数字代码部分，并剔除 B 股
+        def is_b_stock(symbol):
+            code_part = symbol.split('.')[-1]  # 提取数字部分，例如 "200771"
+            if re.match(r'^(900|200|201|202)', code_part):
+                return True
+            return False
+        df = df[~df['symbol'].apply(is_b_stock)]
+        # 剔除 ST 和 *ST 开头的股票
+        df = df[~df['sec_name'].str.contains(r'\\*ST|^ST', regex=True)]
+
+        logger.info(f"[Provider]列名: {df.columns.tolist()}")
+        logger.info(f"[Provider]行数: {len(df)}")
+        df.rename(columns={'symbol': 'code', 'sec_name': 'name'}, inplace=True)
+        # 若为北交所，使用股票代码格式进行过滤
+        if market == "BJ":
+            df = df[df['code'].astype(str).str.contains(r'^(43|83|87|92)', regex=True)]
+        df.sort_values(by='code', ascending=True, inplace=True)
         return df[['code', 'name']]
 
     def get_stock_history(self, source="juejinquant", code="SHSE.600000", start_date=None, end_date=None, period="1d", count=10):

@@ -1,3 +1,4 @@
+import os
 import tushare as ts
 import pandas as pd
 from core.logger import logger
@@ -6,10 +7,12 @@ from dotenv import load_dotenv
 load_dotenv()
 class TushareProvider:
     def __init__(self):
-        ts.set_token("TUSHARE_TOKEN")
+        token = os.getenv("TUSHARE_TOKEN")  # 获取环境变量
+        logger.info(f"TUSHARE_TOKEN value: {token}")  # 打印 token 值
+        ts.set_token(token)
         self.pro = ts.pro_api()
 
-    # 可用，1h限制
+    # 可用，1分钟限制
     def get_all_stocks(self, market=None):
         """
         获取所有股票列表，支持按市场筛选
@@ -26,12 +29,16 @@ class TushareProvider:
         elif market == "BJ":
             exchange = "BSE" # 北交所
         df = self.pro.stock_basic(exchange=exchange, list_status='L', fields='ts_code,symbol,name')
+        if market == "KE":  # 科创板
+            df = df[df['symbol'].astype(str).str.startswith('68')]
+        elif market == "CY":  # 创业板
+            df = df[df['symbol'].astype(str).str.startswith('30')]
+        # 剔除 ST 和 *ST 开头的股票
+        df = df[~df['name'].str.contains(r'\\*ST|^ST', regex=True)]
+        logger.info(f"[Provider]列名: {df.columns.tolist()}")
+        logger.info(f"[Provider]行数: {len(df)}")
         df['code'] = df['symbol']
         df['name'] = df['name']
-        if market == "KE":  # 科创板
-            df = df[df['code'].astype(str).str.startswith('68')]
-        elif market == "CY":  # 创业板
-            df = df[df['code'].astype(str).str.startswith('30')]
         return df[['code', 'name']]
 
     # 不可用

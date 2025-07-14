@@ -4,7 +4,11 @@ import pandas as pd
 def get_all_stocks(source="akshare", market=None):
     """
     获取所有股票列表
-    :param source: 数据源名称（akshare/tushare/efinance/qstock）
+    :param source: 数据源名称（akshare/tushare/juejinquant）
+        akshare 无限制
+        tushare 限制次数（积分要求）
+        juejinquant 需下载终端
+    :params market: 交易所名称（SH/SZ/BJ/KE/CY）
     :return: DataFrame 包含 ['代码', '名称']
     """
     logger.info(f"[Bridge]获取所有股票 from {source}")
