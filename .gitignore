@@ -22,3 +22,4 @@ ENV/
 
 app.log
 
+/.venv39

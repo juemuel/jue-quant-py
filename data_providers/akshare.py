@@ -1,3 +1,4 @@
+import time
 import akshare as ak
 import pandas as pd
 from core.logger import logger
@@ -58,8 +59,46 @@ class AkShareProvider:
         logger.info(f"[Provider]列名: {df.columns.tolist()}")
         logger.info(f"[Provider]行数: {len(df)}")
         return df
-    def get_concept_stocks(self, concept_name):
-        df = ak.stock_board_concept_cons_em(symbol=concept_name).sort_values(by='涨跌幅', ascending=False).head(5)
-        return df
-
-
+    def get_concept_stocks(self, concept_name=None):
+        try:
+            # 获取所有概念列表
+            concept_df = ak.stock_board_concept_name_em()
+            logger.info(f"[Provider]列名: {concept_df.columns.tolist()}")
+            logger.info(f"[Provider]行数: {len(concept_df)}")
+            
+            # 如果未传参数或空字符串，返回所有概念
+            if not concept_name:
+                return concept_df[['板块名称', '板块代码']]
+            
+            # 模糊匹配概念名称
+            concept_names = concept_df['板块名称'].tolist()
+            matched = [name for name in concept_names if concept_name in name]
+            if not matched:
+                logger.error(f"[Provider]未找到匹配概念: {concept_name}")
+                return pd.DataFrame(columns=['代码', '名称'])
+            
+            # 使用第一个匹配的概念名称
+            concept_name = matched[0]
+            
+            # 获取概念成分股
+            df = ak.stock_board_concept_cons_em(symbol=concept_name)
+            if df is None or df.empty:
+                logger.error(f"[Provider]空数据 for {concept_name}")
+                return pd.DataFrame(columns=['代码', '名称'])
+                
+            # 确保包含必要列
+            if '代码' not in df.columns or '名称' not in df.columns:
+                logger.error(f"[Provider]缺少必要列 for {concept_name}")
+                return pd.DataFrame(columns=['代码', '名称'])
+                
+            # 按涨跌幅排序并取前5
+            if '涨跌幅' in df.columns:
+                df = df.sort_values(by='涨跌幅', ascending=False).head(5)
+            else:
+                df = df.head(5)
+                
+            return df[['代码', '名称']]
+            
+        except Exception as e:
+            logger.error(f"[Provider]获取概念成分股最终失败: {str(e)}")
+            return pd.DataFrame(columns=['代码', '名称'])
