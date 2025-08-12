@@ -10,10 +10,9 @@ default_provider = 'akshare'
 provider_map = {
     'tushare': TushareProvider,
     'akshare': AkShareProvider,
-    # QSOTCK：py_mini_racer冲突
-    # 'qstock': QStockProvider,
     'yfinance': YFinanceProvider,
     'juejinquant': JueJinQuantProvider
+    # 'qstock': QStockProvider, # py_mini_racer冲突
 }
 
 def get_data_provider(name: str = default_provider):
