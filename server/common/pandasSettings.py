@@ -1,4 +1,4 @@
-# common/settings.py
+# common/pandasSettings.py
 import pandas as pd
 
 # Pandas 显示设置

@@ -3,8 +3,8 @@ import akshare as ak
 import pandas as pd
 from core.logger import logger
 class AkShareProvider:
-    # 可用
-    def get_all_stocks(self, market=None):
+    # 1.1 获取所有股票列表（可用）
+    def get_all_stocks(self, source, market=None):
         """
         获取股票列表，支持按市场筛选
         :param market: 'SH'（上交所）, 'SZ'（深交所）, 'BJ'（北交所）, 'CY'（创业板）, 'KE'（科创板）
@@ -32,7 +32,52 @@ class AkShareProvider:
         logger.info(f"[Provider]列名: {df.columns.tolist()}")
         logger.info(f"[Provider]行数: {len(df)}")
         return df[['code', 'name']]
-    # 可用
+
+    # 1.2 获取所有概念板块列表（可用）
+    def get_all_concepts(self):
+        """
+        获取所有概念板块列表
+        :return: DataFrame ['板块代码', '板块名称']
+        """
+        logger.info(f"[Provider]source={self.__class__.__name__}")
+        # 获取所有概念板块列表
+        concept_df = ak.stock_board_concept_name_em()
+        logger.info(f"[Provider]列名: {concept_df.columns.tolist()}")
+        logger.info(f"[Provider]行数: {len(concept_df)}")
+        return concept_df
+
+    # 1.3 获取概念板块成分股（支持板块代码和板块名称）
+    def get_concept_constituent_stocks(self, concept_identifier):
+        """
+        获取指定概念板块的成分股
+        :param concept_identifier: 概念板块标识符（可以是板块代码或板块名称）
+        :return: DataFrame ['代码', '名称', '最新价', '涨跌幅', '涨跌额', '成交量', '成交额', '振幅', '最高', '最低', '今开', '昨收']
+        """
+        logger.info(f"[Provider]source={self.__class__.__name__}, concept_identifier={concept_identifier}")
+        
+        # 首先获取所有概念板块列表，用于代码和名称的转换
+        concept_list_df = ak.stock_board_concept_name_em()
+        
+        # 判断输入的是板块代码还是板块名称
+        if concept_identifier in concept_list_df['板块代码'].values:
+            # 输入的是板块代码，需要转换为板块名称
+            concept_name = concept_list_df[concept_list_df['板块代码'] == concept_identifier]['板块名称'].iloc[0]
+            logger.info(f"[Provider]通过板块代码 {concept_identifier} 找到板块名称: {concept_name}")
+        elif concept_identifier in concept_list_df['板块名称'].values:
+            # 输入的是板块名称，直接使用
+            concept_name = concept_identifier
+            logger.info(f"[Provider]直接使用板块名称: {concept_name}")
+        else:
+            # 既不是有效的板块代码也不是有效的板块名称
+            raise ValueError(f"无效的概念板块标识符: {concept_identifier}")
+        
+        # 获取概念板块成分股
+        df = ak.stock_board_concept_cons_em(symbol=concept_name)
+        logger.info(f"[Provider]列名: {df.columns.tolist()}")
+        logger.info(f"[Provider]行数: {len(df)}")
+        return df
+
+    # 2.1 获取股票历史数据（可用）
     def get_stock_history(self, source, code, market, start_date=None, end_date=None):
         """
         获取股票历史行情（默认日线）
@@ -48,57 +93,62 @@ class AkShareProvider:
         logger.info(f"[Provider]列名: {df.columns.tolist()}")
         logger.info(f"[Provider]行数: {len(df)}")
         return df
+
+    # 3.1 获取股票实时行情（可用）
+    def get_realtime_quotes(self, source, codes=None):
+        """
+        获取股票实时行情
+        :param codes: 股票代码列表(逗号分隔字符串)，如 "000001,000002" 或 None(获取所有)
+        :return: DataFrame
+        """
+        logger.info(f"[Provider]sources={source}")
+        df = ak.stock_zh_a_spot_em()
+        logger.info(f"[Provider]列名: {df.columns.tolist()}")
+        logger.info(f"[Provider]行数: {len(df)}")
+        return df
+
+    # 4.1 获取宏观数据（GDP、CPI、PPI、PMI）
     def get_macro_gdp_data(self, source):
         """
-        获取宏观GDP数据（QStock 暂无直接 GDP 数据接口）
-        :param source: 数据源名称（如 'qstock'）
-        :return: DataFrame or None + 异常提示
+        获取宏观GDP数据
+        :param source: 数据源名称
+        :return: DataFrame
         """
-        print(f"[Provider]source={source}")
+        logger.info(f"[Provider]source={source}")
         df = ak.macro_china_gdp()
         logger.info(f"[Provider]列名: {df.columns.tolist()}")
         logger.info(f"[Provider]行数: {len(df)}")
         return df
-    def get_concept_stocks(self, concept_name=None):
-        try:
-            # 获取所有概念列表
-            concept_df = ak.stock_board_concept_name_em()
-            logger.info(f"[Provider]列名: {concept_df.columns.tolist()}")
-            logger.info(f"[Provider]行数: {len(concept_df)}")
-            
-            # 如果未传参数或空字符串，返回所有概念
-            if not concept_name:
-                return concept_df[['板块名称', '板块代码']]
-            
-            # 模糊匹配概念名称
-            concept_names = concept_df['板块名称'].tolist()
-            matched = [name for name in concept_names if concept_name in name]
-            if not matched:
-                logger.error(f"[Provider]未找到匹配概念: {concept_name}")
-                return pd.DataFrame(columns=['代码', '名称'])
-            
-            # 使用第一个匹配的概念名称
-            concept_name = matched[0]
-            
-            # 获取概念成分股
-            df = ak.stock_board_concept_cons_em(symbol=concept_name)
-            if df is None or df.empty:
-                logger.error(f"[Provider]空数据 for {concept_name}")
-                return pd.DataFrame(columns=['代码', '名称'])
-                
-            # 确保包含必要列
-            if '代码' not in df.columns or '名称' not in df.columns:
-                logger.error(f"[Provider]缺少必要列 for {concept_name}")
-                return pd.DataFrame(columns=['代码', '名称'])
-                
-            # 按涨跌幅排序并取前5
-            if '涨跌幅' in df.columns:
-                df = df.sort_values(by='涨跌幅', ascending=False).head(5)
-            else:
-                df = df.head(5)
-                
-            return df[['代码', '名称']]
-            
-        except Exception as e:
-            logger.error(f"[Provider]获取概念成分股最终失败: {str(e)}")
-            return pd.DataFrame(columns=['代码', '名称'])
+    def get_macro_cpi_data(self, source):
+        """
+        获取宏观CPI数据
+        :param source: 数据源名称
+        :return: DataFrame
+        """
+        logger.info(f"[Provider]source={source}")
+        df = ak.macro_china_cpi_yearly()
+        logger.info(f"[Provider]列名: {df.columns.tolist()}")
+        logger.info(f"[Provider]行数: {len(df)}")
+        return df
+    def get_macro_ppi_data(self, source):
+        """
+        获取宏观PPI数据
+        :param source: 数据源名称
+        :return: DataFrame
+        """
+        logger.info(f"[Provider]source={source}")
+        df = ak.macro_china_ppi_yearly()
+        logger.info(f"[Provider]列名: {df.columns.tolist()}")
+        logger.info(f"[Provider]行数: {len(df)}")
+        return df
+    def get_macro_pmi_data(self, source):
+        """
+        获取宏观PMI数据
+        :param source: 数据源名称
+        :return: DataFrame
+        """
+        logger.info(f"[Provider]source={source}")
+        df = ak.macro_china_pmi()
+        logger.info(f"[Provider]列名: {df.columns.tolist()}")
+        logger.info(f"[Provider]行数: {len(df)}")
+        return df
