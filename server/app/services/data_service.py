@@ -4,7 +4,10 @@ from common.utils import clean_numeric_data, safe_convert_to_dict, debug_datafra
 import pandas as pd
 import numpy as np
 import datetime
-# 1.1 获取所有股票列表（已完成）
+from typing import List, Dict, Optional
+
+# 一、数据服务层-市场行情数据
+# 1.1.1 获取所有股票列表（已完成）
 def get_all_stocks(source="akshare", market=None, fields=None, page=None, page_size=20 ):
     """
     获取所有股票列表
@@ -89,7 +92,7 @@ def get_all_stocks(source="akshare", market=None, fields=None, page=None, page_s
         logger.error(f"[Service]获取所有股票失败: {e}")
         return {"status": 'error', "message": f"获取失败：{e}"}
 
-# 1.2 获取所有概念板块列表（已完成）
+# 1.1.2 获取所有概念板块列表（已完成）
 def get_concept_stocks(source="akshare", fields=None, page=None, page_size=20):
     """
     获取概念板块成分股
@@ -175,7 +178,7 @@ def get_concept_stocks(source="akshare", fields=None, page=None, page_size=20):
         logger.error(f"[Service]获取概念板块成分股失败: {e}")
         return {"status": "error", "message": f"获取失败: {e}"}
 
-# 1.3 获取概念板块成分股（已完成）
+# 1.1.3 获取概念板块成分股（已完成）
 def get_concept_constituent_stocks(source="akshare", concept_identifier=None, fields=None, page=None, page_size=20):
     """
     获取概念板块成分股
@@ -311,7 +314,7 @@ def get_concept_constituent_stocks(source="akshare", concept_identifier=None, fi
         logger.error(f"[Service]获取概念板块成分股失败: {e}")
         return {"status": "error", "message": f"获取失败: {e}"}
 
-# 2.1 获取股票历史记录（已完成）
+# 1.2.1 获取股票历史记录（已完成）
 def get_stock_history(source="akshare", code="000001", market="SH", start_date=None, end_date=None, fields=None, page=None, page_size=100):
     """
     获取股票历史行情数据并标准化输出格式
@@ -428,7 +431,7 @@ def get_stock_history(source="akshare", code="000001", market="SH", start_date=N
         logger.error(f"[Service]获取股票历史行情数据失败: {e}")
         return {"status": 'error', "message": f"获取失败：{e}"}
 
-# 3.1 获取股票实时数据（已完成）
+# 1.3.1 获取股票实时数据（已完成）
 def get_realtime_quotes(source="akshare", codes=None, fields=None,page=None, page_size=20):
     """
     获取股票实时行情
@@ -521,8 +524,8 @@ def get_realtime_quotes(source="akshare", codes=None, fields=None,page=None, pag
         logger.error(f"[Service]获取实时行情失败: {e}")
         return {"status": "error", "message": f"获取失败: {e}"}
 
-# 4.1 获取宏观数据（已完成）
-# 4.1.1 获取宏观数据概念描述
+# 二、数据服务层-基本面数据
+# 2.1 获取宏观数据（已完成）
 def get_indicator_description(indicator):
     """
     获取指标描述
@@ -681,3 +684,55 @@ def get_macro_data(source="akshare", indicator="GDP", start_date=None, end_date=
     except Exception as e:
         logger.error(f"[Service]获取宏观经济数据失败: {e}")
         return {"status": "error", "message": f"获取失败: {str(e)}"}
+
+# 2.2 获取财务数据（TODO）
+def get_finacial_report(source="akshare", code="000001", report_type= "annual", fields= None):
+    """
+    获取财务数据
+    :param source: 数据源
+    :param code: 股票代码
+    :param report_type: 报告类型
+    :param fields: 返回字段,逗号分隔
+    :return: 财务数据
+
+    """
+    pass
+
+# 三、数据服务层--资金流与订单流
+# 3.1 获取资金流向数据（TODO）
+def get_stock_fund_flow(source="akshare", code="000001", start_date=None, end_date=None, fields=None):
+    """
+    获取股票资金流向数据
+    :param source: 数据源
+    :param code: 股票代码
+    :param start_date: 开始日期
+    :param end_date: 结束日期
+    :param fields: 返回字段,逗号分隔
+    :return: 资金流向数据
+    """
+    pass
+
+# 3.2 获取龙虎榜数据（TODO）
+def get_dragon_tiger_list(source="akshare", start_date=None, end_date=None, fields=None):
+    """
+    获取龙虎榜数据
+    :param source: 数据源
+    :param start_date: 开始日期
+    :param end_date: 结束日期
+    :param fields: 返回字段,逗号分隔
+    :return: 龙虎榜数据
+    """
+    pass
+
+# 四、数据服务层-财务新闻、市场情绪、行业动态
+# 4.1 获取财务新闻数据（TODO）
+def get_news_sentiment(source="akshare", start_date=None, end_date=None, fields=None):
+    """
+    获取新闻情感数据
+    :param source: 数据源
+    :param start_date: 开始日期
+    :param end_date: 结束日期
+    :param fields: 返回字段,逗号分隔
+    :return: 新闻情感数据
+    """
+    pass
