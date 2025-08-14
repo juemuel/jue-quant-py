@@ -5,10 +5,12 @@ import pandas as pd
 import numpy as np
 import datetime
 from typing import List, Dict, Optional
+from app.services.processor.data_processor import DataProcessor
+
 
 # 一、数据服务层-市场行情数据
-# 1.1.1 获取所有股票列表（已完成）
-def get_all_stocks(source="akshare", market=None, fields=None, page=None, page_size=20 ):
+# 1.1.1 获取所有股票列表（标准化流程）
+def get_all_stocks(source="akshare", market=None, fields=None, page=None, page_size=20):
     """
     获取所有股票列表
     :param source: 数据源名称（akshare/tushare/juejinquant）
@@ -24,161 +26,89 @@ def get_all_stocks(source="akshare", market=None, fields=None, page=None, page_s
     """
     logger.info(f"[Bridge]获取所有股票 from {source}")
     try:
-        # 0.调用接口
+        # 1.调用接口
         data_provider = get_data_provider(source)
         df = data_provider.get_all_stocks(source=source, market=market)
-        
-        # 1.判空处理
+        # 2.判空处理
         if df.empty:
             logger.warning(f"[Service]无数据返回 {source}")
             return {"status": 'error', "message": "未查询到数据"}
-        
-        # 2.标准化字段列名校验+重命名（左转右）+数据源支持校验+字段格式调整
-        if source in ["akshare", "tushare", "juejinquant"]:
-            required_columns = {
-                'code': '代码',
-                'name': '名称'
-            }
-        else:
-            return {"status": 'error', "message": "不支持的数据源"}
-        missing_cols = [col for col in required_columns.keys() if col not in df.columns]
-        if missing_cols:
-            logger.warning(f"[Service]缺少关键列 {source}: {', '.join(missing_cols)}")
-            return {"status": 'error', "message": f"缺少关键列: {', '.join(missing_cols)}"}
-        df.rename(columns=required_columns, inplace=True)
-        
-        # 3.传入列字段过滤
-        if fields:
-            field_list = [f.strip() for f in fields.split(',')]
-            available_fields = [col for col in field_list if col in df.columns]
-            if not available_fields:
-                return {"status": "error", "message": "请求的字段不存在"}
-            df = df[available_fields]
-        else:
-            df = df[['代码', '名称']]
+        # 3.使用标准化数据处理器进行字段标准化和处理
+        try:
+            result = DataProcessor.process_stock_list_data(
+                df, source, use_chinese=True, core_only=False, fields=fields
+            )
+            df_processed = result["data"]
+            available_fields = result["available_fields"]
             
-        # 4.data处理，是否开启分页处理（统一处理始终返回list和pagination）
-        total = len(df)
-        if page is not None:
-            # 分页模式
-            start = (page - 1) * page_size
-            end = start + page_size
-            paged_df = df.iloc[start:end]
-            data = {
-                "list": paged_df.to_dict(orient='records'),
-                "pagination": {
-                    "total": total,
-                    "page": page,
-                    "page_size": page_size,
-                    "pages": (total + page_size - 1) // page_size
-                }
-            }
-        else:
-            data = {
-                "list": df.to_dict(orient='records'),
-                "pagination": {
-                    "total": len(df),
-                    "page": 1,
-                    "page_size": len(df),
-                    "pages": 1
-                }
-            }
+            logger.info(f"[Service]处理的列名: {df_processed.columns.tolist()}")
+            logger.info(f"[Service]可用标准字段: {available_fields}")
+        except ValueError as e:
+            logger.error(f"[Service]字段处理失败: {e}")
+            return {"status": 'error', "message": str(e)}
+        # 4.应用分页处理+补充字段
+        result_data = DataProcessor.apply_pagination(df_processed, page, page_size)
+        result_data["available_fields"] = available_fields
         return {
             "status": 'success', 
-            "data": data,
+            "data": result_data,
             "message": "Success"
         }
     except Exception as e:
         logger.error(f"[Service]获取所有股票失败: {e}")
         return {"status": 'error', "message": f"获取失败：{e}"}
 
-# 1.1.2 获取所有概念板块列表（已完成）
+# 1.1.2 获取所有概念板块列表（标准化流程）
 def get_concept_stocks(source="akshare", fields=None, page=None, page_size=20):
     """
-    获取概念板块成分股
+    获取概念板块列表
     :param source: 数据源名称
-    :param concept: 概念板块名称
-    :return: 概念板块成分股列表
+    :param fields: 返回字段,逗号分隔
+    :param page: 页码
+    :param page_size: 每页数量
+    :return: 概念板块列表
     """
-    logger.info(f"[Bridge]获取概念板块成分股 from {source}")
+    logger.info(f"[Service]获取概念板块列表 from {source}")
     try:
-        # 0.调用接口
+        # 0.调用数据提供者获取原始数据
         data_provider = get_data_provider(source)
         df = data_provider.get_all_concepts()
-
-        # 1.判空处理
+        
+        # 2.判空处理
         if df.empty:
             logger.warning(f"[Service]无数据返回 {source}")
             return {"status": "error", "message": "未查询到数据"}
-
-        # 2.标准化字段列名校验+重命名（左转右）+数据源支持校验+字段格式调整
-        if source == "akshare":
-            required_columns = {
-                '板块代码': '板块代码',
-                '板块名称': '板块名称'
-            }
-        else:
-            return {"status": "error", "message": "不支持的数据源"}
-        missing_cols = [col for col in required_columns.keys() if col not in df.columns]
-        if missing_cols:
-            logger.error(f"[Service]缺少字段: {missing_cols}")
-            return {"status": "error", "message": f"数据缺少必要字段: {', '.join(missing_cols)}"}
-        df.rename(columns=required_columns, inplace=True)
-       
-        # 3.传入列字段过滤
-        if fields:
-            field_list = [f.strip() for f in fields.split(',')]
-            available_fields = [col for col in field_list if col in df.columns]
-            if not available_fields:
-                return {"status": "error", "message": "请求的字段不存在"}
-            df = df[available_fields]
-        else:
-            df = df[['板块代码', '板块名称']]
-         # 3.5 数据排序 - 按板块名称升序排列
-        # 3.5 数据排序 = 按板块名称升序排列
+        
+        # 3.使用标准化数据处理器进行字段标准化和处理
         try:
-            df = df.sort_values('板块名称', ascending=True, na_last=True)
-            df = df.reset_index(drop=True)
-        except Exception as e:
-            logger.warning(f"[Service]排序失败，使用原始顺序: {e}")
-        # 4.data处理，是否开启分页处理（统一处理始终返回list和pagination）
-        total = len(df)
-        if page is not None:
-            # 分页模式
-            start = (page - 1) * page_size
-            end = start + page_size
-            paged_df = df.iloc[start:end]
-            data = {
-                "list": paged_df.to_dict(orient='records'),
-                "pagination": {
-                    "total": total,
-                    "page": page,
-                    "page_size": page_size,
-                    "pages": (total + page_size - 1) // page_size
-                }
-            }
-        else:
-            # 非分页模式，但保持结构一致
-            data = {
-                "list": df.to_dict(orient='records'),
-                "pagination": {
-                    "total": total,
-                    "page": 1,
-                    "page_size": total,
-                    "pages": 1
-                }
-            }
-
+            result = DataProcessor.process_concept_data(
+                df, source, use_chinese=True, core_only=True, fields=fields
+            )
+            df_processed = result["data"]
+            available_fields = result["available_fields"]
+            
+            logger.info(f"[Service]处理后的列名: {df_processed.columns.tolist()}")
+            logger.info(f"[Service]可用标准字段: {available_fields}")
+            
+        except ValueError as e:
+            logger.error(f"[Service]字段处理失败: {e}")
+            return {"status": "error", "message": str(e)}
+        
+        # 4.应用分页处理+补充字段
+        result_data = DataProcessor.apply_pagination(df_processed, page, page_size)
+        result_data["available_fields"] = available_fields
+        
         return {
-            "status": 'success', 
-            "data": data,
-            "message": "Success"
+            "status": "success", 
+            "data": result_data,
+            "message": "概念板块数据获取成功"
         }
+        
     except Exception as e:
-        logger.error(f"[Service]获取概念板块成分股失败: {e}")
+        logger.error(f"[Service]获取概念板块列表失败: {e}")
         return {"status": "error", "message": f"获取失败: {e}"}
 
-# 1.1.3 获取概念板块成分股（已完成）
+# 1.1.3 获取概念板块成分股（标准化流程）
 def get_concept_constituent_stocks(source="akshare", concept_identifier=None, fields=None, page=None, page_size=20):
     """
     获取概念板块成分股
@@ -189,132 +119,68 @@ def get_concept_constituent_stocks(source="akshare", concept_identifier=None, fi
     :param page_size: 每页数量
     :return: 概念板块成分股列表
     """
-    logger.info(f"[Bridge]获取概念板块成分股 from {source}, concept_identifier={concept_identifier}")
+    logger.info(f"[Service]获取概念板块成分股 from {source}, concept_identifier={concept_identifier}")
     
     if not concept_identifier:
         return {"status": "error", "message": "概念板块标识符不能为空"}
     
     try:
-        # 0.调用接口
+        # 1.调用接口
         data_provider = get_data_provider(source)
-         # 获取板块信息
+        # 特殊补充：获取板块信息用于返回元数据
         concept_info = None
         if source == "akshare":
-            # 获取所有概念板块列表，用于查找板块信息
             concept_list_df = data_provider.get_all_concepts()
             if concept_identifier in concept_list_df['板块代码'].values:
-                # 通过板块代码查找
                 concept_row = concept_list_df[concept_list_df['板块代码'] == concept_identifier].iloc[0]
                 concept_info = {
                     "板块代码": str(concept_row['板块代码']),
-                    "板块名称": str(concept_row['板块名称']),
-                    "换手率": int(concept_row.get('换手率', 0)) if pd.notna(concept_row.get('换手率', 0)) else 0,
-                    "涨跌幅": float(concept_row.get('涨跌幅', 0)) if pd.notna(concept_row.get('涨跌幅', 0)) else 0.0,
-                    "上涨家数": int(concept_row.get('上涨家数', 0)) if pd.notna(concept_row.get('上涨家数', 0)) else 0,
-                    "下跌家数": int(concept_row.get('下跌家数', 0)) if pd.notna(concept_row.get('下跌家数', 0)) else 0
+                    "板块名称": str(concept_row['板块名称'])
                 }
             elif concept_identifier in concept_list_df['板块名称'].values:
-                # 通过板块名称查找
                 concept_row = concept_list_df[concept_list_df['板块名称'] == concept_identifier].iloc[0]
                 concept_info = {
                     "板块代码": str(concept_row['板块代码']),
-                    "板块名称": str(concept_row['板块名称']),
-                    "换手率": int(concept_row.get('换手率', 0)) if pd.notna(concept_row.get('换手率', 0)) else 0,
-                    "涨跌幅": float(concept_row.get('涨跌幅', 0)) if pd.notna(concept_row.get('涨跌幅', 0)) else 0.0,
-                    "上涨家数": int(concept_row.get('上涨家数', 0)) if pd.notna(concept_row.get('上涨家数', 0)) else 0,
-                    "下跌家数": int(concept_row.get('下跌家数', 0)) if pd.notna(concept_row.get('下跌家数', 0)) else 0
+                    "板块名称": str(concept_row['板块名称'])
                 }
-        df = data_provider.get_concept_constituent_stocks(concept_identifier=concept_identifier)
-        # 1.判空处理
+        df = data_provider.get_concept_constituent_stocks(concept_identifier)
+        
+        # 2.判空处理
         if df.empty:
             logger.warning(f"[Service]无数据返回 {source} for concept={concept_identifier}")
             return {"status": "error", "message": f"未查询到概念板块 '{concept_identifier}' 的成分股数据"}
-
-        # 2.标准化字段列名校验+重命名（左转右）+数据源支持校验+字段格式调整
-        if source == "akshare":
-            required_columns = {
-                '代码': '代码',
-                '名称': '名称',
-                '最新价': '最新价',
-                '涨跌幅': '涨跌幅',
-                '涨跌额': '涨跌额',
-                '成交量': '成交量',
-                '成交额': '成交额',
-                '振幅': '振幅',
-                '最高': '最高价',
-                '最低': '最低价',
-                '今开': '开盘价',
-                '昨收': '昨收价'
-            }
-        else:
-            return {"status": "error", "message": "不支持的数据源"}
         
-        missing_cols = [col for col in required_columns.keys() if col not in df.columns]
-        if missing_cols:
-            logger.error(f"[Service]缺少字段: {missing_cols}")
-            return {"status": "error", "message": f"数据缺少必要字段: {', '.join(missing_cols)}"}
-        df.rename(columns=required_columns, inplace=True)
-        
-        # 3.传入列字段过滤
-        if fields:
-            field_list = [f.strip() for f in fields.split(',')]
-            available_fields = [col for col in field_list if col in df.columns]
-            if not available_fields:
-                return {"status": "error", "message": "请求的字段不存在"}
-            df = df[available_fields]
-        else:
-            df = df[['代码', '名称', '最新价', '涨跌幅', '涨跌额', '成交量', '成交额', '振幅', '最高价', '最低价', '开盘价', '昨收价']]
-        
-        # 3.5 数据排序 - 按涨跌幅降序排列
+        # 3.使用标准化数据处理器进行字段标准化和处理
         try:
-            df = df.sort_values('涨跌幅', ascending=False, na_position='last')
-            df = df.reset_index(drop=True)
-        except Exception as e:
-            logger.warning(f"[Service]排序失败，使用原始顺序: {e}")
+            result = DataProcessor.process_concept_constituent_stocks_data(
+                df, source, use_chinese=True, core_only=True, fields=fields
+            )
+            df_processed = result["data"]
+            available_fields = result["available_fields"]
+            
+            logger.info(f"[Service]处理后的列名: {df_processed.columns.tolist()}")
+            logger.info(f"[Service]可用标准字段: {available_fields}")
+            
+        except ValueError as e:
+            logger.error(f"[Service]字段处理失败: {e}")
+            return {"status": "error", "message": str(e)}
         
-        # 4.data处理，是否开启分页处理（统一处理始终返回list和pagination）
-        total = len(df)
-        if page is not None:
-            # 分页模式
-            start = (page - 1) * page_size
-            end = start + page_size
-            paged_df = df.iloc[start:end]
-            data = {
-                "concept_info": concept_info,
-                "list": paged_df.to_dict(orient='records'),
-                "pagination": {
-                    "total": total,
-                    "page": page,
-                    "page_size": page_size,
-                    "pages": (total + page_size - 1) // page_size
-                }
-            }
-        else:
-            # 非分页模式，但保持结构一致
-            data = {
-                "concept_info": concept_info,
-                "list": df.to_dict(orient='records'),
-                "pagination": {
-                    "total": total,
-                    "page": 1,
-                    "page_size": total,
-                    "pages": 1
-                }
-            }
-
+        # 4.应用分页处理+补充字段
+        result_data = DataProcessor.apply_pagination(df_processed, page, page_size)
+        result_data["concept_info"] = concept_info
+        result_data["available_fields"] = available_fields
+        
         return {
-            "status": 'success', 
-            "data": data,
-            "message": "Success"
+            "status": "success",
+            "data": result_data,
+            "message": "概念成分股数据获取成功"
         }
-    except ValueError as ve:
-        logger.error(f"[Service]参数错误: {ve}")
-        return {"status": "error", "message": str(ve)}
+        
     except Exception as e:
         logger.error(f"[Service]获取概念板块成分股失败: {e}")
         return {"status": "error", "message": f"获取失败: {e}"}
 
-# 1.2.1 获取股票历史记录（已完成）
+# 1.2.1 获取股票历史记录（标准化流程）
 def get_stock_history(source="akshare", code="000001", market="SH", start_date=None, end_date=None, fields=None, page=None, page_size=100):
     """
     获取股票历史行情数据并标准化输出格式
@@ -326,206 +192,103 @@ def get_stock_history(source="akshare", code="000001", market="SH", start_date=N
     :param fields: 返回字段
     :param page: 页码
     :param page_size: 每页数量
-    :return: DataFrame 包含 ['日期', 'close']
+    :return: 标准化格式的股票历史数据
     """
-    logger.info(f"[Bridge]获取股票历史行情数据并标准化输出格式 for {code}.{market} from {source}")
+    logger.info(f"[Data]获取股票历史行情数据 {code}.{market} from {source}")
     try:
-        # 0.调用接口
+        # 1.调用接口
         data_provider = get_data_provider(source)
         df = data_provider.get_stock_history(source=source, code=code, market=market, start_date=start_date, end_date=end_date)
         
-        # 1.判空处理
+        # 2.判空处理
         if df.empty:
             logger.warning(f"[Service]无数据返回 {source} for {code}.{market}")
-            return {"status": 'error', "message": "未查询到数据"}
+            return {"status": "error", "message": "未查询到数据"}
         
-        # 2.标准化字段列名校验+重命名（左转右）+数据源支持校验+字段格式调整
-        if source == "akshare":
-            required_columns = {
-                '股票代码': '代码',
-                '日期': '日期',
-                '开盘': '开盘价',
-                '收盘': '收盘价',
-                '最高': '最高价',
-                '最低': '最低价',
-                '成交量': '成交量'
-            }
-        elif source == "tushare":
-            required_columns = {
-                'trade_date': '日期',
-                'open': '开盘价',
-                'close': '收盘价',
-                'high': '最高价',
-                'low': '最低价',
-                'vol': '成交量'
-            }
-        elif source == "qstock":
-            required_columns = {
-                'date': '日期',
-                'open': '开盘价',
-                'close': '收盘价',
-                'high': '最高价',
-                'low': '最低价',
-                'volume': '成交量'
-            }
-        elif source == "yfinance":
-            required_columns = {
-                'Date': '日期',
-                'Open': '开盘价',
-                'Close': '收盘价',
-                'High': '最高价',
-                'Low': '最低价',
-                'Volume': '成交量'
-            }
-        else:
-            return {"status": 'error', "message": "不支持的数据源"}
-        missing_cols = [col for col in required_columns.keys() if col not in df.columns]
-        if missing_cols:
-            logger.warning(f"[Service]缺少关键列 {source}: {', '.join(missing_cols)}")
-            return {"status": 'error', "message": f"缺少关键列: {', '.join(missing_cols)}"}
-        df.rename(columns=required_columns, inplace=True)
-        df['日期'] = pd.to_datetime(df['日期']).dt.strftime('%Y-%m-%d')
+        # 3.使用标准化数据处理器进行字段标准化和处理
+        try:
+            result = DataProcessor.process_stock_history_data(
+                df, source, use_chinese=True, core_only=False, fields=fields
+            )
+            
+            df_processed = result["data"]
+            available_fields = result["available_fields"]
+            
+            logger.info(f"[Service]处理后的列名: {df_processed.columns.tolist()}")
+            logger.info(f"[Service]可用标准字段: {available_fields}")
+            
+        except ValueError as e:
+            logger.error(f"[Service]字段处理失败: {e}")
+            return {"status": "error", "message": str(e)}
         
-        # 3.传入列字段过滤
-        if fields:
-            field_list = [f.strip() for f in fields.split(',')]
-            available_fields = [col for col in field_list if col in df.columns]
-            if not available_fields:
-                return {"status": "error", "message": "请求的字段不存在"}
-            df = df[available_fields]
-        else:
-            df = df[['代码','日期', '开盘价', '收盘价', '最高价', '最低价', '成交量']]
-        
-        # 4.data处理，是否开启分页处理（统一处理始终返回list和pagination）
-        total = len(df)
-        if page is not None:
-            # 分页模式
-            start = (page - 1) * page_size
-            end = start + page_size
-            paged_df = df.iloc[start:end]
-            data = {
-                "list": paged_df.to_dict(orient='records'),
-                "pagination": {
-                    "total": total,
-                    "page": page,
-                    "page_size": page_size,
-                    "pages": (total + page_size - 1) // page_size
-                }
-            }
-        else:
-            data = {
-                "list": df.to_dict(orient='records'),
-                "pagination": {
-                    "total": len(df),
-                    "page": 1,
-                    "page_size": len(df),
-                    "pages": 1
-                }
-            }
+        # 4.应用分页处理+补充字段
+        result_data = DataProcessor.apply_pagination(df_processed, page, page_size)
+        result_data["symbol"] = f"{code}.{market}"
+        result_data["date_range"] = f"{start_date} to {end_date}" if start_date and end_date else "latest"
+        result_data["available_fields"] = available_fields
         return {
-            "status": 'success', 
-            "data": data,
-            "message": "Success"
+            "status": "success",
+            "data": result_data,
+            "message": "股票历史数据获取成功"
         }
+        
     except Exception as e:
-        logger.error(f"[Service]获取股票历史行情数据失败: {e}")
-        return {"status": 'error', "message": f"获取失败：{e}"}
+        logger.error(f"[Data]获取股票历史行情数据失败: {e}")
+        return {"status": "error", "message": f"获取失败：{e}"}
 
-# 1.3.1 获取股票实时数据（已完成）
-def get_realtime_quotes(source="akshare", codes=None, fields=None,page=None, page_size=20):
+# 1.3.1 获取股票实时数据（标准化流程）
+def get_realtime_quotes(source="akshare", codes=None, fields=None, page=None, page_size=20):
     """
     获取股票实时行情
     :param source: 数据源名称
     :param codes: 股票代码列表(逗号分隔)
+    :param fields: 指定返回字段
     :param page: 页码
     :param page_size: 每页数量
     :return: 实时行情数据
     """
-    logger.info(f"[Bridge]获取实时行情 from {source}")
+    logger.info(f"[Service]获取实时行情 from {source}")
     try:
-        # 0.调用接口 
+        # 1.调用数据提供者获取原始数据
         data_provider = get_data_provider(source)
         df = data_provider.get_realtime_quotes(source=source, codes=codes)
 
-        # 1.判空处理
+        # 2.判空处理
         if df.empty:
             logger.warning(f"[Service]无数据返回 {source} for codes={codes}")
             return {"status": "error", "message": "未查询到数据"}
         
-        # 2.标准化字段列名校验+重命名（左转右）+数据源支持校验+字段格式调整
-        if source == "akshare":
-            required_columns = {
-                '代码': '代码',
-                '名称': '名称',
-                '最新价': '最新价',
-                '涨跌幅': '涨跌幅',
-                '成交量': '成交量',
-                '最高': '最高价',
-                '最低': '最低价',
-                '量比': '量比',
-                '换手率': '换手率',
-                '市盈率-动态': '市盈率',
-                '市净率': '市净率',
-                '总市值': '总市值',
-                '流通市值': '流通市值'
-            }
-        else:
-            return {"status": "error", "message": "不支持的数据源"}
-        missing_cols = [col for col in required_columns.keys() if col not in df.columns]
-        if missing_cols:
-            logger.error(f"[Service]缺少字段: {missing_cols}")
-            return {"status": "error", "message": f"数据缺少必要字段: {', '.join(missing_cols)}"}
-        df.rename(columns=required_columns, inplace=True)
+        # 3.使用标准化数据处理器进行字段标准化和处理
+        try:
+            result = DataProcessor.process_realtime_quotes_data(
+                df, source, use_chinese=True, core_only=True, fields=fields
+            )
+            df_processed = result["data"]
+            available_fields = result["available_fields"]
+            
+            logger.info(f"[Service]处理后的列名: {df_processed.columns.tolist()}")
+            logger.info(f"[Service]可用标准字段: {available_fields}")
+            
+        except ValueError as e:
+            logger.error(f"[Service]字段处理失败: {e}")
+            return {"status": "error", "message": str(e)}
         
-        # 3.传入列字段过滤
-        if fields:
-            field_list = [f.strip() for f in fields.split(',')]
-            available_fields = [col for col in field_list if col in df.columns]
-            if not available_fields:
-                return {"status": "error", "message": "请求的字段不存在"}
-            df = df[available_fields]
-        else:
-            df = df[['代码', '名称', '最新价', '涨跌幅', '成交量', 
-            '最高价', '最低价', '量比', '换手率', '市盈率', '市净率', '总市值', '流通市值']]
-
-        # 4.data处理，是否开启分页处理（统一处理始终返回list和pagination）
-        total = len(df)
-        if page is not None:
-            # 分页模式
-            start = (page - 1) * page_size
-            end = start + page_size
-            paged_df = df.iloc[start:end]
-            data = {
-                "list": paged_df.to_dict(orient='records'),
-                "pagination": {
-                    "total": total,
-                    "page": page,
-                    "page_size": page_size,
-                    "pages": (total + page_size - 1) // page_size
-                }
-            }
-        else:
-            # 非分页模式，但保持结构一致
-            data = {
-                "list": df.to_dict(orient='records'),
-                "pagination": {
-                    "total": total,
-                    "page": 1,
-                    "page_size": total,
-                    "pages": 1
-                }
-            }
+        # 4.应用分页处理+补充字段
+        result_data = DataProcessor.apply_pagination(df_processed, page, page_size)
+        result_data["available_fields"] = available_fields
+        
         return {
             "status": "success",
-            "data": data,
-            "message": "Success"
+            "data": result_data,
+            "message": "实时行情数据获取成功"
         }
+        
     except Exception as e:
         logger.error(f"[Service]获取实时行情失败: {e}")
-        return {"status": "error", "message": f"获取失败: {e}"}
+        return {"status": "error", "message": f"获取失败：{e}"}
 
 # 二、数据服务层-基本面数据
-# 2.1 获取宏观数据（已完成）
+# 2.1 获取宏观数据（标准化流程）
 def get_indicator_description(indicator):
     """
     获取指标描述
@@ -552,9 +315,8 @@ def get_macro_data(source="akshare", indicator="GDP", start_date=None, end_date=
     logger.info(f"[Service]获取宏观经济数据 {indicator} from {source}")
     
     try:
-        # 0.调用接口
+        # 1.调用接口
         data_provider = get_data_provider(source)
-        # 根据指标类型调用不同方法
         if indicator.upper() == "GDP":
             df = data_provider.get_macro_gdp_data(source=source)
         elif indicator.upper() == "CPI":
@@ -565,174 +327,281 @@ def get_macro_data(source="akshare", indicator="GDP", start_date=None, end_date=
             df = data_provider.get_macro_pmi_data(source=source)
         else:
             return {"status": "error", "message": f"暂不支持指标: {indicator}"}
-        # 调试输出：查看原始数据
-        # debug_dataframe(df)
 
-        # 1.判空处理
+        # 2.判空处理
         if df.empty:
             logger.warning(f"[Service]无数据返回 {source} for indicator={indicator}")
             return {"status": "error", "message": f"未查询到指标 '{indicator}' 的数据"}
 
-        # 2.标准化字段列名校验+重命名（左转右）+数据源支持校验+字段格式调整
-        if source == "akshare":
-            # 根据不同指标进行字段标准化
-            if indicator.upper() == "GDP":
-                required_columns = {
-                    '季度': '日期',
-                    '国内生产总值-绝对值': '数值',
-                    '国内生产总值-同比增长': '同比增长率'
-                }
-            elif indicator.upper() == "CPI":
-                required_columns = {
-                    '日期': '日期',
-                    '今值': '当前值',
-                    '预测值': '预测值',
-                    '前值': '前值',
-                    '商品': '商品类别'
-                }
-            elif indicator.upper() == "PPI":
-                required_columns = {
-                    '日期': '日期',
-                    '今值': '当前值',
-                    '预测值': '预测值',
-                    '前值': '前值',
-                    '商品': '商品类别'
-                }
-            elif indicator.upper() == "PMI":
-                required_columns = {
-                    '月份': '日期',
-                    '制造业-指数': '制造业-指数',
-                    '制造业-同比增长': '制造业-同比增长',
-                    '非制造业-指数': '非制造业-指数',
-                    '非制造业-同比增长': '非制造业-同比增长'
-                }
+        # 3.使用标准化数据处理器进行字段标准化和处理
+        try:
+            result = DataProcessor.process_macro_data(
+                df, source, indicator, start_date, end_date, 
+                use_chinese=True, core_only=True, fields=fields
+            )
+            df_processed = result["data"]
+            available_fields = result["available_fields"]
             
-            # 检查必需列是否存在
-            missing_columns = [col for col in required_columns.keys() if col not in df.columns]
-            if missing_columns:
-                logger.warning(f"[Service]缺少必需列: {missing_columns}")
-                # 使用原始列名
-                available_columns = {col: col for col in df.columns}
-                df = df.rename(columns=available_columns)
-            else:
-                df = df.rename(columns=required_columns)
+            logger.info(f"[Service]处理后的列名: {df_processed.columns.tolist()}")
+            logger.info(f"[Service]可用标准字段: {available_fields}")
+            
+        except ValueError as e:
+            logger.error(f"[Service]字段处理失败: {e}")
+            return {"status": "error", "message": str(e)}
 
-        # 3.日期过滤
-        if start_date or end_date:
-            date_column = '日期'
-            if date_column in df.columns:
-                df[date_column] = pd.to_datetime(df[date_column], errors='coerce')
-                if start_date:
-                    start_dt = pd.to_datetime(start_date)
-                    df = df[df[date_column] >= start_dt]
-                if end_date:
-                    end_dt = pd.to_datetime(end_date)
-                    df = df[df[date_column] <= end_dt]
+        # 4.应用分页处理+字段补充
+        result_data = DataProcessor.apply_pagination(df_processed, page, page_size)
+        result_data["indicator_info"] = {
+            "indicator": str(indicator.upper()),
+            "description": str(get_indicator_description(indicator))
+        }
+        result_data["available_fields"] = available_fields
         
-        # 4.字段过滤
-        if fields:
-            field_list = [f.strip() for f in fields.split(',')]
-            available_fields = [f for f in field_list if f in df.columns]
-            if available_fields:
-                df = df[available_fields]
-            else:
-                logger.warning(f"[Service]指定字段不存在: {field_list}")
-        
-        # 5.排序（按日期倒序）
-        if '日期' in df.columns:
-            df = df.sort_values('日期', ascending=False, na_position='last')
-        
-        # 6.分页处理
-        total_count = len(df)
-        if page is not None and page_size is not None:
-            start_idx = (page - 1) * page_size
-            end_idx = start_idx + page_size
-            df_page = df.iloc[start_idx:end_idx]
-            data_list = safe_convert_to_dict(df_page)
-            return {
-                "status": "success",
-                "message": f"成功获取{indicator}数据",
-                "data": {
-                    "indicator_info": {
-                        "indicator": str(indicator.upper()),
-                        "total_count": int(total_count),
-                        "description": str(get_indicator_description(indicator))
-                    },
-                    "pagination": {
-                        "page": int(page),
-                        "page_size": int(page_size),
-                        "total_count": int(total_count),
-                        "total_pages": int((total_count + page_size - 1) // page_size)
-                    },
-                    "records": data_list
-                }
-            }
-        else:
-            return {
-                "status": "success",
-                "message": f"成功获取{indicator}数据",
-                "data": {
-                    "indicator_info": {
-                        "indicator": str(indicator.upper()),
-                        "total_count": int(total_count),
-                        "description": str(get_indicator_description(indicator))
-                    },
-                    "records": data_list
-                }
-            }
+        return {
+            "status": "success",
+            "data": result_data,
+            "message": "宏观经济数据获取成功"
+        }
             
     except Exception as e:
         logger.error(f"[Service]获取宏观经济数据失败: {e}")
         return {"status": "error", "message": f"获取失败: {str(e)}"}
 
-# 2.2 获取财务数据（TODO）
-def get_finacial_report(source="akshare", code="000001", report_type= "annual", fields= None):
+# 2.2 获取财务数据（标准化流程）——FINACIAL_REPORT 类型事件
+def get_financial_report(source="akshare", code="000001", market=None, report_type=None, fields=None, page=None, page_size=20, use_chinese=True, core_only=True):
     """
     获取财务数据
     :param source: 数据源
     :param code: 股票代码
-    :param report_type: 报告类型
+    :param market: 市场代码（可选）
+    :param report_type: 报告类型 (annual/quarterly/semi_annual)
     :param fields: 返回字段,逗号分隔
+    :param page: 页码
+    :param page_size: 每页数量
     :return: 财务数据
-
     """
-    pass
+    logger.info(f"[Data]获取财务数据 {code} from {source}")
+    try:
+        # 处理股票代码格式
+        if market:
+            # 如果提供了市场代码，直接拼接
+            symbol = f"{market}{code}"
+        else:
+            # 自动识别市场（简单规则）
+            if code.startswith('6'):
+                symbol = f"SH{code}"  # 上海证券交易所
+            elif code.startswith(('0', '3')):
+                symbol = f"SZ{code}"  # 深圳证券交易所
+            else:
+                # 如果已经包含前缀，直接使用
+                if code.startswith(('SH', 'SZ')):
+                    symbol = code
+                else:
+                    raise ValueError(f"无法识别股票代码格式: {code}")
+        logger.info(f"[Provider]转换后的symbol: {symbol}")
+        # 1.调用接口
+        data_provider = get_data_provider(source)
+        df = data_provider.get_financial_report(code=symbol)
+        
+        # 2.判空处理
+        if df.empty:
+            logger.warning(f"[Service]无数据返回 {source} for code={code}")
+            return {"status": "error", "message": f"未查询到股票 '{code}' 的财务数据"}
+        
+        # 3.使用标准化数据处理器进行字段标准化和处理
+        try:
+            result = DataProcessor.process_financial_data(
+                df, source, use_chinese=True, core_only=True, fields=fields,
+                report_type=report_type
+            )
+            df_processed = result["data"]
+            available_fields = result["available_fields"]
+            
+            logger.info(f"[Service]处理的列名: {df_processed.columns.tolist()}")
+            logger.info(f"[Service]可用标准字段: {available_fields}")
+        except ValueError as e:
+            logger.error(f"[Service]字段处理失败: {e}")
+            return {"status": "error", "message": str(e)}
+        
+        # 4.应用分页处理+补充字段
+        result_data = DataProcessor.apply_pagination(df_processed, page, page_size)
+        result_data["available_fields"] = available_fields
+        return {
+            "status": "success",
+            "data": result_data,
+            "message": "财务数据获取成功"
+        }
+            
+    except Exception as e:
+        logger.error(f"[Data]获取财务数据失败: {e}")
+        return {"status": "error", "message": f"获取失败：{e}"}
 
 # 三、数据服务层--资金流与订单流
-# 3.1 获取资金流向数据（TODO）
-def get_stock_fund_flow(source="akshare", code="000001", start_date=None, end_date=None, fields=None):
+# 3.1 获取资金流向数据（标准化流程）——MARKET_SENTIMENT 类型事件
+def get_stock_fund_flow(source="akshare", code="000001", indicator="今日", fields=None, page=None, page_size=20):
     """
     获取股票资金流向数据
     :param source: 数据源
     :param code: 股票代码
-    :param start_date: 开始日期
-    :param end_date: 结束日期
+    :param indicator: 时间周期（"今日", "3日", "5日", "10日"）
     :param fields: 返回字段,逗号分隔
-    :return: 资金流向数据
+    :param page: 页码
+    :param page_size: 每页数量
+    :return: 股票资金流向数据
     """
-    pass
+    logger.info(f"[Data]获取资金流向数据 {code} from {source}, indicator={indicator}")
+    try:
+        # 1.调用接口
+        data_provider = get_data_provider(source)
+        df = data_provider.get_stock_fund_flow(code=code, indicator=indicator)
+        
+        # 2.判空处理
+        if df.empty:
+            logger.warning(f"[Service]无数据返回 {source} for code={code}")
+            return {"status": "error", "message": f"未查询到股票 '{code}' 的资金流向数据"}
+        
+        # 3.使用标准化数据处理器进行字段标准化和处理
+        try:
+            result = DataProcessor.process_fund_flow_data(
+                df, source, use_chinese=True, core_only=False, fields=fields
+            )
+            
+            df_processed = result["data"]
+            available_fields = result["available_fields"]
+            
+            logger.info(f"[Service]处理的列名: {df_processed.columns.tolist()}")
+            logger.info(f"[Service]可用标准字段: {available_fields}")
+        except ValueError as e:
+            logger.error(f"[Service]字段处理失败: {e}")
+            return {"status": "error", "message": str(e)}
+        
+        # 4.应用分页处理+补充字段
+        result_data = DataProcessor.apply_pagination(df_processed, page, page_size)
+        result_data["symbol"] = code
+        result_data["indicator"] = indicator
+        result_data["available_fields"] = available_fields
+        return {
+            "status": "success",
+            "data": result_data,
+            "message": "资金流向数据获取成功"
+        }
+            
+    except Exception as e:
+        logger.error(f"[Data]获取资金流向数据失败: {e}")
+        return {"status": "error", "message": f"获取失败：{e}"}
 
-# 3.2 获取龙虎榜数据（TODO）
-def get_dragon_tiger_list(source="akshare", start_date=None, end_date=None, fields=None):
+# 3.2 获取龙虎榜数据（标准化流程）——INSIDER_TRADING 类型事件
+def get_dragon_tiger_list(source="akshare", start_date=None, end_date=None, fields=None, page=None, page_size=20):
     """
     获取龙虎榜数据
-    :param source: 数据源
-    :param start_date: 开始日期
-    :param end_date: 结束日期
-    :param fields: 返回字段,逗号分隔
-    :return: 龙虎榜数据
     """
-    pass
+    logger.info(f"[Data]获取龙虎榜数据 from {source}, date range={start_date} to {end_date}, fields={fields}")
+
+    try:
+        # 1.调用接口
+        data_provider = get_data_provider(source)
+        df = data_provider.get_dragon_tiger_list(start_date=start_date, end_date=end_date)
+        
+        # 2.判空处理
+        if df.empty:
+            logger.warning(f"[Service]无数据返回 {source} for date range={start_date} to {end_date}")
+            return {"status": "error", "message": f"未查询到日期范围 '{start_date}' 到 '{end_date}' 的龙虎榜数据"}
+        
+        # 3.使用标准化数据处理器进行字段标准化和处理
+        try:
+            result = DataProcessor.process_dragon_tiger_data(
+                df, source, use_chinese=True, core_only=False, fields=fields
+            )
+            df_processed = result["data"]
+            available_fields = result["available_fields"]
+            
+            logger.info(f"[Service]处理的列名: {df_processed.columns.tolist()}")
+            logger.info(f"[Service]可用标准字段: {available_fields}")
+        except ValueError as e:
+            logger.error(f"[Service]字段处理失败: {e}")
+            return {"status": "error", "message": str(e)}
+        
+        # 4.应用分页处理+补充字段
+        result_data = DataProcessor.apply_pagination(df_processed, page, page_size)
+        result_data["date_range"] = f"{start_date} to {end_date}"
+        result_data["available_fields"] = available_fields
+        return {
+            "status": "success",
+            "data": result_data,
+            "message": "龙虎榜数据获取成功"
+        }
+            
+    except Exception as e:
+        logger.error(f"[Data]获取龙虎榜数据失败: {e}")
+        return {"status": "error", "message": f"获取失败：{e}"}
 
 # 四、数据服务层-财务新闻、市场情绪、行业动态
-# 4.1 获取财务新闻数据（TODO）
-def get_news_sentiment(source="akshare", start_date=None, end_date=None, fields=None):
+# 4.1 获取财务新闻数据（标准化流程）——NEWS 类型事件
+def get_news_sentiment(source="akshare", symbol=None, start_date=None, end_date=None, fields=None, page=None, page_size=20):
     """
     获取新闻情感数据
-    :param source: 数据源
-    :param start_date: 开始日期
-    :param end_date: 结束日期
-    :param fields: 返回字段,逗号分隔
-    :return: 新闻情感数据
     """
-    pass
+    logger.info(f"[Data]获取新闻情感数据 {symbol} from {source}")
+    try:
+        # 1.调用接口
+        data_provider = get_data_provider(source)
+        df = data_provider.get_news_sentiment(symbol=symbol, start_date=start_date, end_date=end_date)
+        
+        # 2.判空处理
+        if df.empty:
+            logger.warning(f"[Service]无数据返回 {source} for symbol={symbol}")
+            return {"status": "error", "message": f"未查询到股票 '{symbol}' 的新闻数据"}
+        # 添加调试信息
+        # debug_dataframe(df, "[Debug-1] 原始数据")
+        # 2.情感分析处理（在字段处理前）
+        if '新闻标题' in df.columns and '新闻内容' in df.columns:
+            try:
+                from snownlp import SnowNLP
+                import jieba.analyse
+                df['情感得分'] = df.apply(lambda row: 
+                    SnowNLP(str(row['新闻标题']) + str(row['新闻内容'])).sentiments, axis=1)
+                df['关键词'] = df.apply(lambda row: 
+                    jieba.analyse.extract_tags(str(row['新闻标题']) + str(row['新闻内容']), topK=5), axis=1)
+                # 修复：添加安全的标量值检查
+                def classify_sentiment(score):
+                    try:
+                        # 确保score是标量值
+                        if hasattr(score, '__len__') and not isinstance(score, str):
+                            score = score[0] if len(score) > 0 else 0.5
+                        score = float(score)
+                        return '正面' if score > 0.6 else '负面' if score < 0.4 else '中性'
+                    except (ValueError, TypeError, IndexError):
+                        return '中性'
+                df['情感分类'] = df['情感得分'].apply(classify_sentiment)
+                
+            except ImportError:
+                logger.warning("[Service]缺少情感分析依赖包，跳过情感分析")
+        # 3.使用新的数据处理器进行字段标准化和处理
+        try:
+            result = DataProcessor.process_news_data(
+                df, source, use_chinese=True, core_only=False, fields=fields
+            )
+            
+            df_processed = result["data"]
+            available_fields = result["available_fields"]
+            
+            logger.info(f"[Service]处理的列名: {df_processed.columns.tolist()}")
+            logger.info(f"[Service]可用标准字段: {available_fields}")
+        except ValueError as e:
+            logger.error(f"[Service]字段处理失败: {e}")
+            return {"status": "error", "message": str(e)}
+        
+        # 4.应用分页处理
+        result_data = DataProcessor.apply_pagination(df_processed, page, page_size)
+        result_data["symbol"] = symbol
+        result_data["date_range"] = f"{start_date} to {end_date}" if start_date and end_date else "latest"
+        result_data["available_fields"] = available_fields
+        return {
+            "status": "success",
+            "data": result_data,
+            "message": "新闻情感数据获取成功"
+        }
+            
+    except Exception as e:
+        logger.error(f"[Data]获取新闻情感数据失败: {e}")
+        return {"status": "error", "message": f"获取失败：{e}"}

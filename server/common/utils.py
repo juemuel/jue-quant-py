@@ -116,7 +116,13 @@ def safe_convert_to_dict(df):
     for _, row in df.iterrows():
         row_dict = {}
         for key, value in row.items():
-            if pd.isna(value) or value in [np.inf, -np.inf]:
+             # 先检查是否为列表或数组类型
+            if isinstance(value, (list, tuple, np.ndarray)):
+                try:
+                    row_dict[key] = [str(item) for item in value] if value else []
+                except (TypeError, ValueError):
+                    row_dict[key] = str(value)
+            elif pd.isna(value) or value in [np.inf, -np.inf]:
                 row_dict[key] = None
             elif isinstance(value, (np.integer, np.floating)):
                 if np.isfinite(value):
