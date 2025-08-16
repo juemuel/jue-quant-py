@@ -25,7 +25,12 @@ def calculate_moving_averages(df, periods=[5, 10, 20, 60]):
             else:
                 logger.warning("[Analytics]未找到收盘价列")
                 return {"status": "error", "message": "未找到收盘价数据"}
-        
+            # 添加有效值起始点判断
+            first_valid_idx = result_df[f'MA{period}'].first_valid_index()
+            if first_valid_idx is not None:
+                logger.info(f"[Analytics]MA{period} 从第{first_valid_idx + 1}个交易日开始有值（索引{first_valid_idx}）")
+            else:
+                logger.warning(f"[Analytics]MA{period} 没有有效值")
         # 清理数据
         cleaned_data = clean_numeric_data(result_df)
         data_dict = safe_convert_to_dict(cleaned_data)
@@ -97,9 +102,26 @@ def calculate_rsi(df, period=14):
         delta = df[close_col].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-        rs = gain / loss
+        # 添加除0保护
+        rs = gain / loss.replace(0, np.nan)
         result_df['RSI'] = 100 - (100 / (1 + rs))
+        # 处理边界情况
+        mask_loss_zero = (loss == 0)
+        mask_gain_positive = (gain > 0) & mask_loss_zero
+        mask_gain_zero = (gain == 0) & mask_loss_zero
         
+        result_df.loc[mask_gain_positive, 'RSI'] = 100.0
+        result_df.loc[mask_gain_zero, 'RSI'] = 50.0
+        
+        # 添加有效值起始点判断
+        first_valid_idx = result_df['RSI'].first_valid_index()
+        if first_valid_idx is not None:
+            logger.info(f"[Analytics]RSI 从第{first_valid_idx + 1}个交易日开始有值（索引{first_valid_idx}）")
+            logger.info(f"[Analytics]RSI 需要{period + 1}个交易日的数据才能开始计算")
+        else:
+            logger.warning(f"[Analytics]RSI 没有有效值")
+        
+        result_df['RSI'] = pd.to_numeric(result_df['RSI'], errors='coerce')
         # 清理数据
         cleaned_data = clean_numeric_data(result_df)
         data_dict = safe_convert_to_dict(cleaned_data)

@@ -10,11 +10,13 @@ from core.logger import logger
 # 事件类型枚举
 class EventType(Enum):
     NEWS = "news"                    # 财经新闻
-    FINANCIAL_REPORT = "financial"   # 财务报告
+
+    FINANCIAL_REPORT = "financial_report"   # 财务报告
+    EARNINGS = "earnings"           # 业绩预告
+    
     ANNOUNCEMENT = "announcement"    # 公司公告
     MARKET_SENTIMENT = "sentiment"   # 市场情绪
     MACRO_DATA = "macro"            # 宏观数据
-    EARNINGS = "earnings"           # 业绩预告
     DIVIDEND = "dividend"           # 分红派息
     INSIDER_TRADING = "insider"     # 内幕交易
     ANALYST_RATING = "rating"       # 分析师评级

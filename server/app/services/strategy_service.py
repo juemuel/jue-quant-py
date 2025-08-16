@@ -11,6 +11,7 @@ from .risk_manage_service import (
     calculate_volatility, calculate_max_drawdown, 
     calculate_sharpe_ratio, calculate_var, calculate_win_rate)
 from .signal_service import DataSignalGenerator, EventSignalGenerator, UnifiedSignalManager
+from .event_service import MarketEvent, EventType, EventSeverity 
 from .signal_rules.data_signal_rules import (
     adaptive_ma_crossover_rule, 
     multi_confirmation_rsi_rule,
@@ -21,10 +22,9 @@ from .signal_rules.event_signal_rules import (
     news_sentiment_rule,
     earnings_anticipation_rule,
     keyword_trigger_rule,
-    earnings_anticipation_rule
 )
 # ============ 价格数据信号 ============
-# 均线交叉信号 - 基于价格计算的移动平均线
+# 1.1.1 单信号-均线交叉信号 - 基于价格计算的移动平均线[在基础单信号生成中已验证]
 def generate_ma_crossover_signal(df, short_period=5, long_period=20):
     """
     生成移动平均线交叉信号
@@ -73,7 +73,8 @@ def generate_ma_crossover_signal(df, short_period=5, long_period=20):
     except Exception as e:
         logger.error(f"[Strategy]生成均线交叉信号失败: {e}")
         return {"status": "error", "message": f"信号生成失败: {e}"}
-# RSI信号 - 基于价格计算的RSI指标
+
+# 1.1.2 单信号-RSI信号 - 基于价格计算的RSI指标[在基础单信号生成中已验证]
 def generate_rsi_signal(df, period=14, oversold=30, overbought=70):
     """
     生成RSI超买超卖信号
@@ -91,6 +92,10 @@ def generate_rsi_signal(df, period=14, oversold=30, overbought=70):
             return rsi_result
         
         result_df = pd.DataFrame(rsi_result['data'])
+
+        # 关键修正：确保RSI列是数值类型
+        if 'RSI' in result_df.columns:
+            result_df['RSI'] = pd.to_numeric(result_df['RSI'], errors='coerce')
         
         # 生成交易信号
         result_df['signal'] = 0
@@ -118,7 +123,7 @@ def generate_rsi_signal(df, period=14, oversold=30, overbought=70):
         logger.error(f"[Strategy]生成RSI信号失败: {e}")
         return {"status": "error", "message": f"信号生成失败: {e}"}
 
-# 使用数据驱动信号生成器
+# 1.2.1 使用数据驱动信号生成器(TODO)
 def generate_data_driven_signals(df, signal_rules=None, filter_rules=None):
     """
     基于规则的信号生成
@@ -187,7 +192,7 @@ def generate_data_driven_signals(df, signal_rules=None, filter_rules=None):
         return {"status": "error", "message": f"信号生成失败: {e}"}
 
 # ============ 事件驱动信号 ============
-# 新闻情感信号生成
+# 2.1.1 单信号-新闻情感信号生成(TODO)
 def generate_news_sentiment_signal(events_data: List[Dict], sentiment_threshold=0.7):
     """
     生成基于新闻情感的交易信号
@@ -206,13 +211,18 @@ def generate_news_sentiment_signal(events_data: List[Dict], sentiment_threshold=
         # 过滤新闻事件
         news_events = []
         for event_data in events_data:
-            if event_data.get('event_type') == EventType.NEWS.value:
-                try:
-                    event = MarketEvent(**event_data)
-                    news_events.append(event)
-                except Exception as e:
-                    logger.warning(f"[Strategy]跳过无效新闻事件: {e}")
-                    continue
+            # 处理MarketEvent对象或字典
+            if isinstance(event_data, MarketEvent):
+                if event_data.event_type == EventType.NEWS:
+                    news_events.append(event_data)
+            elif isinstance(event_data, dict):
+                if event_data.get('event_type') == EventType.NEWS.value:
+                    try:
+                        event = MarketEvent(**event_data)
+                        news_events.append(event)
+                    except Exception as e:
+                        logger.warning(f"[Strategy]跳过无效新闻事件: {e}")
+                        continue
         
         signals = signal_generator.generate_signals(news_events)
         
@@ -237,11 +247,11 @@ def generate_news_sentiment_signal(events_data: List[Dict], sentiment_threshold=
         logger.error(f"[Strategy]新闻情感信号生成失败: {e}")
         return {"status": "error", "message": f"信号生成失败: {e}"}
 
-# 财报事件信号生成
+# 2.1.2 单信号-财报事件信号生成(TODO)
 def generate_earnings_signal(events_data: List[Dict], anticipation_days=3):
     """
     生成基于财报事件的交易信号
-    :param events_data: 事件数据列表
+    :param events_data: 事件数据列表（可以是字典或MarketEvent对象）
     :param anticipation_days: 财报预期天数
     :return: 财报事件信号
     """
@@ -256,13 +266,21 @@ def generate_earnings_signal(events_data: List[Dict], anticipation_days=3):
         # 过滤财报事件
         earnings_events = []
         for event_data in events_data:
-            if event_data.get('event_type') == EventType.FINANCIAL_REPORT.value:
-                try:
-                    event = MarketEvent(**event_data)
-                    earnings_events.append(event)
-                except Exception as e:
-                    logger.warning(f"[Strategy]跳过无效财报事件: {e}")
-                    continue
+            # 处理MarketEvent对象或字典
+            if isinstance(event_data, MarketEvent):
+                # 同时支持EARNINGS和FINANCIAL_REPORT类型
+                if event_data.event_type in [EventType.EARNINGS, EventType.FINANCIAL_REPORT]:
+                    earnings_events.append(event_data)
+            elif isinstance(event_data, dict):
+                event_type_value = event_data.get('event_type')
+                if (event_type_value == EventType.FINANCIAL_REPORT.value or 
+                    event_type_value == EventType.EARNINGS.value):
+                    try:
+                        event = MarketEvent(**event_data)
+                        earnings_events.append(event)
+                    except Exception as e:
+                        logger.warning(f"[Strategy]跳过无效财报事件: {e}")
+                        continue
         
         signals = signal_generator.generate_signals(earnings_events)
         
@@ -281,7 +299,7 @@ def generate_earnings_signal(events_data: List[Dict], anticipation_days=3):
         logger.error(f"[Strategy]财报事件信号生成失败: {e}")
         return {"status": "error", "message": f"信号生成失败: {e}"}
 
-# 关键词触发信号生成
+# 2.1.3 单信号-关键词触发信号生成(TODO)
 def generate_keyword_trigger_signal(events_data: List[Dict], keywords=None, trigger_strength=0.6):
     """
     生成基于关键词触发的交易信号
@@ -332,7 +350,7 @@ def generate_keyword_trigger_signal(events_data: List[Dict], keywords=None, trig
         logger.error(f"[Strategy]关键词触发信号生成失败: {e}")
         return {"status": "error", "message": f"信号生成失败: {e}"}
 
-# 市场异动事件信号生成
+# 2.1.4 单信号-市场异动事件信号生成(TODO)
 def generate_market_anomaly_signal(events_data: List[Dict], anomaly_threshold=2.0):
     """
     生成基于市场异动事件的交易信号
@@ -394,7 +412,7 @@ def generate_market_anomaly_signal(events_data: List[Dict], anomaly_threshold=2.
         logger.error(f"[Strategy]市场异动信号生成失败: {e}")
         return {"status": "error", "message": f"信号生成失败: {e}"}
 
-# 综合事件信号生成（多类型事件组合）
+# 2.2.1 综合信号-事件权重信号生成（TODO）
 def generate_composite_event_signal(events_data: List[Dict], signal_weights=None):
     """
     生成综合事件信号（结合多种事件类型）
@@ -491,7 +509,8 @@ def generate_composite_event_signal(events_data: List[Dict], signal_weights=None
     except Exception as e:
         logger.error(f"[Strategy]综合事件信号生成失败: {e}")
         return {"status": "error", "message": f"信号生成失败: {e}"}
-# 使用事件驱动信号生成器
+
+# 2.3.1 生成器-使用事件驱动信号生成器(TODO)
 def generate_event_driven_signals(events_data: List[Dict], signal_rules=None):
     """
     生成事件驱动信号
@@ -542,7 +561,8 @@ def generate_event_driven_signals(events_data: List[Dict], signal_rules=None):
         logger.error(f"[Strategy]事件驱动信号生成失败: {e}")
         return {"status": "error", "message": f"信号生成失败: {e}"}
 
-# ============ 统一信号生成器 ============
+# ============ 多驱动信号 ============
+# 3.1 统一驱动信号-生成器(既支持数据信号也支持事件信号)
 def generate_unified_signals(price_data: pd.DataFrame, events_data: List[Dict] = None, 
                            data_signal_config=None, event_signal_config=None):
     """
@@ -576,44 +596,81 @@ def generate_unified_signals(price_data: pd.DataFrame, events_data: List[Dict] =
         
         # 生成数据驱动信号
         data_signals = []
-        if data_signal_config.get('ma_crossover', {}).get('enable', True):
-            ma_result = generate_ma_crossover_signal(
-                price_data, 
-                data_signal_config['ma_crossover']['short_period'],
-                data_signal_config['ma_crossover']['long_period']
-            )
-            if ma_result['status'] == 'success':
-                data_signals.extend(ma_result['data'])
-        
-        if data_signal_config.get('rsi', {}).get('enable', True):
-            rsi_result = generate_rsi_signal(
-                price_data,
-                data_signal_config['rsi']['period'],
-                data_signal_config['rsi']['oversold'],
-                data_signal_config['rsi']['overbought']
-            )
-            if rsi_result['status'] == 'success':
-                data_signals.extend(rsi_result['data'])
+        if data_signal_config.get('rule_based', {}).get('enable', True):
+            # 使用DataSignalGenerator生成规则驱动的信号
+            data_generator = DataSignalGenerator()
+            # 添加信号规则
+            data_generator.add_signal_rule(adaptive_ma_crossover_rule)
+            data_generator.add_signal_rule(multi_confirmation_rsi_rule)
+            # 计算技术指标
+            indicators = {}
+            if data_signal_config.get('ma_crossover', {}).get('enable', True):
+                ma_result = analytic_service.calculate_moving_averages(
+                    price_data, 
+                    [3, 5, 10, 20]  # 包含所有可能的周期
+                )
+                # ma_result = analytic_service.calculate_moving_averages(
+                #     price_data, 
+                #     [data_signal_config['ma_crossover']['short_period'], 
+                #     data_signal_config['ma_crossover']['long_period']]
+                # )
+                if ma_result['status'] == 'success':
+                    ma_df = pd.DataFrame(ma_result['data'])
+                    for col in ma_df.columns:
+                        if col.startswith('MA'):
+                            indicators[col] = ma_df[col]
+            if data_signal_config.get('rsi', {}).get('enable', True):
+                rsi_result = analytic_service.calculate_rsi(
+                    price_data, 
+                    data_signal_config['rsi']['period']
+                )
+                if rsi_result['status'] == 'success':
+                    rsi_df = pd.DataFrame(rsi_result['data'])
+                    logger.info(f"[Strategy]RSI DataFrame列: {rsi_df.columns.tolist()}")
+                    logger.info(f"[Strategy]RSI列数据类型: {rsi_df['RSI'].dtype if 'RSI' in rsi_df.columns else 'RSI列不存在'}")
+                    
+                    # 确保RSI列是数值类型
+                    if 'RSI' in rsi_df.columns:
+                        rsi_df['RSI'] = pd.to_numeric(rsi_df['RSI'], errors='coerce')
+                        logger.info(f"[Strategy]RSI转换后数据类型: {rsi_df['RSI'].dtype}")
+                        indicators['RSI'] = rsi_df['RSI']
+                        logger.info(f"[Strategy]indicators['RSI']数据类型: {indicators['RSI'].dtype}")
+                    else:
+                        logger.error(f"[Strategy]RSI列不存在于DataFrame中")
+            # 生成信号
+            data_signals = data_generator.generate_signals(price_data, indicators)
+            logger.info(f"[Strategy]原生数据驱动信号生成完成，信号数量: {len(data_signals)}")
         
         # 生成事件驱动信号
         event_signals = []
         if events_data:
+            # 使用EventSignalGenerator统一生成所有事件信号
+            event_generator = EventSignalGenerator()
+            # 根据配置添加相应的规则
             if event_signal_config.get('news_sentiment', {}).get('enable', True):
-                news_result = generate_news_sentiment_signal(
-                    events_data,
-                    event_signal_config['news_sentiment']['threshold']
-                )
-                if news_result['status'] == 'success':
-                    event_signals.extend(news_result['data']['signals'])
+                event_generator.add_rule(news_sentiment_rule)
             
             if event_signal_config.get('earnings', {}).get('enable', True):
-                earnings_result = generate_earnings_signal(
-                    events_data,
-                    event_signal_config['earnings']['anticipation_days']
-                )
-                if earnings_result['status'] == 'success':
-                    event_signals.extend(earnings_result['data']['signals'])
-        
+                event_generator.add_rule(earnings_anticipation_rule)
+            
+            if event_signal_config.get('keyword_trigger', {}).get('enable', True):
+                event_generator.add_rule(keyword_trigger_rule)
+            # 转换事件数据为MarketEvent对象
+            market_events = []
+            for event_data in events_data:
+                try:
+                    if isinstance(event_data, MarketEvent):
+                        market_events.append(event_data)
+                    elif isinstance(event_data, dict):
+                        event = MarketEvent(**event_data)
+                        market_events.append(event)
+                except Exception as e:
+                    logger.warning(f"[Strategy]跳过无效事件数据: {e}")
+                    continue
+            # 生成信号
+            event_signals = event_generator.generate_signals(market_events)
+            logger.info(f"[Strategy]原生事件驱动信号生成完成，信号数量: {len(event_signals)}")
+
         # 合并和优化信号
         unified_signals = unified_manager.merge_signals(data_signals, event_signals)
         
@@ -635,7 +692,10 @@ def generate_unified_signals(price_data: pd.DataFrame, events_data: List[Dict] =
     except Exception as e:
         logger.error(f"[Strategy]统一信号生成失败: {e}")
         return {"status": "error", "message": f"统一信号生成失败: {e}"}
-# 简单回测功能（信号驱动+全仓交易）
+
+
+
+# 简单回测功能（信号驱动+全仓交易）(TODO)
 def simple_backtest(df, signals, initial_capital=100000, commission=0.001):
     """
     简单回测功能
@@ -717,7 +777,7 @@ def simple_backtest(df, signals, initial_capital=100000, commission=0.001):
     except Exception as e:
         logger.error(f"[Strategy]回测失败: {e}")
         return {"status": "error", "message": f"回测失败: {e}"}
-# 增强回测功能（信号驱动 + 风险分析）
+# 增强回测功能（信号驱动 + 风险分析）(TODO)
 def enhanced_backtest(df, signals, initial_capital=100000, commission=0.001, risk_free_rate=0.03):
     """
     增强版回测功能，集成风险管理指标
@@ -887,7 +947,7 @@ def enhanced_backtest(df, signals, initial_capital=100000, commission=0.001, ris
         logger.error(f"[Strategy]增强版回测失败: {e}")
         return {"status": "error", "message": f"回测失败: {e}"}
 
-# 增强回测功能（信号驱动+仓位控制；风险驱动）
+# 增强回测功能（信号驱动+仓位控制；风险驱动）(TODO)
 def enhanced_backtest_with_position_management(
     df, signals, initial_capital=100000, commission=0.001, 
     risk_free_rate=0.03, risk_per_trade=0.02, stop_loss_pct=0.05
@@ -1955,7 +2015,7 @@ def get_available_managers():
 
 
 # ============ 策略参数优化（TODO） ============
-# 优化MA交叉策略参数
+# 优化数据驱动单信号参数(TODO)
 def optimize_ma_crossover():
     # 获取价格数据
     df = get_stock_data('000001.SZ', '2023-01-01', '2024-01-01')
@@ -1978,7 +2038,6 @@ def optimize_ma_crossover():
     # 获取最佳参数
     best_params = optimization_result['data']['best_params']
     print(f"最佳参数: {best_params}")
-# 优化RSI策略参数
 def optimize_rsi_strategy():
     df = get_stock_data('000001.SZ', '2023-01-01', '2024-01-01')
     
@@ -1996,7 +2055,7 @@ def optimize_rsi_strategy():
     )
     
     return result['data']['best_params']
-# 优化事件驱动参数
+# 优化事件驱动单信号参数(TODO)
 def optimize_news_sentiment_strategy():
     events_data = get_news_events('000001.SZ', '2023-01-01', '2024-01-01')
     

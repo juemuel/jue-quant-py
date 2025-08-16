@@ -9,7 +9,7 @@ def news_sentiment_rule(event: MarketEvent) -> Optional[Dict]:
         return None
     
     # 强烈正面新闻 -> 买入信号
-    if event.sentiment_score > 0.7 and event.severity in [EventSeverity.HIGH, EventSeverity.CRITICAL]:
+    if event.sentiment_score > 0.5 and event.severity in [EventSeverity.MEDIUM, EventSeverity.HIGH, EventSeverity.CRITICAL]:
         return {
             'symbol': event.symbol,
             'signal': 1,  # 买入
@@ -19,8 +19,8 @@ def news_sentiment_rule(event: MarketEvent) -> Optional[Dict]:
             'event_id': event.event_id
         }
     
-    # 强烈负面新闻 -> 卖出信号
-    elif event.sentiment_score < -0.7 and event.severity in [EventSeverity.HIGH, EventSeverity.CRITICAL]:
+    # 负面新闻 -> 卖出信号
+    elif event.sentiment_score < -0.5 and event.severity in [EventSeverity.MEDIUM, EventSeverity.HIGH, EventSeverity.CRITICAL]:
         return {
             'symbol': event.symbol,
             'signal': -1,  # 卖出
@@ -35,7 +35,8 @@ def news_sentiment_rule(event: MarketEvent) -> Optional[Dict]:
 # 财报披露前信号规则
 def earnings_anticipation_rule(event: MarketEvent) -> Optional[Dict]:
     """财报披露前的预期信号"""
-    if event.event_type != EventType.FINANCIAL_REPORT:
+    # 同时支持EARNINGS和FINANCIAL_REPORT类型
+    if event.event_type not in [EventType.FINANCIAL_REPORT, EventType.EARNINGS]:
         return None
     
     # 财报披露前3天，根据历史表现决定
@@ -56,8 +57,9 @@ def earnings_anticipation_rule(event: MarketEvent) -> Optional[Dict]:
 # 关键词触发规则
 def keyword_trigger_rule(event: MarketEvent) -> Optional[Dict]:
     """基于关键词的触发规则"""
-    positive_keywords = ['重组', '收购', '合作', '中标', '业绩增长', '分红']
-    negative_keywords = ['调查', '违规', '亏损', '退市', '停牌', '诉讼']
+    # 扩展关键词列表
+    positive_keywords = ['重组', '收购', '合作', '中标', '业绩增长', '分红', '发布会', '成功', '获得', '奖项', '突破']
+    negative_keywords = ['调查', '违规', '亏损', '退市', '停牌', '诉讼', '下滑', '风波', '调整', '收紧']
     
     # 检查正面关键词
     if any(keyword in event.title or keyword in ' '.join(event.keywords) 
