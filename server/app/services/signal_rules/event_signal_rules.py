@@ -9,23 +9,23 @@ def news_sentiment_rule(event: MarketEvent) -> Optional[Dict]:
         return None
     
     # 强烈正面新闻 -> 买入信号
-    if event.sentiment_score > 0.5 and event.severity in [EventSeverity.MEDIUM, EventSeverity.HIGH, EventSeverity.CRITICAL]:
+    if event.sentiment_score > 0.7 and event.severity in [EventSeverity.HIGH, EventSeverity.CRITICAL]:
         return {
             'symbol': event.symbol,
             'signal': 1,  # 买入
             'strength': min(event.sentiment_score, 1.0),
-            'reason': f'正面新闻: {event.title}',
+            'reason': f'强烈正面新闻: {event.title}',
             'timestamp': event.timestamp,
             'event_id': event.event_id
         }
     
     # 负面新闻 -> 卖出信号
-    elif event.sentiment_score < -0.5 and event.severity in [EventSeverity.MEDIUM, EventSeverity.HIGH, EventSeverity.CRITICAL]:
+    elif event.sentiment_score < -0.7 and event.severity in [EventSeverity.HIGH, EventSeverity.CRITICAL]:
         return {
             'symbol': event.symbol,
             'signal': -1,  # 卖出
             'strength': min(abs(event.sentiment_score), 1.0),
-            'reason': f'负面新闻: {event.title}',
+            'reason': f'强烈负面新闻: {event.title}',
             'timestamp': event.timestamp,
             'event_id': event.event_id
         }
@@ -60,15 +60,17 @@ def keyword_trigger_rule(event: MarketEvent) -> Optional[Dict]:
     # 扩展关键词列表
     positive_keywords = ['重组', '收购', '合作', '中标', '业绩增长', '分红', '发布会', '成功', '获得', '奖项', '突破']
     negative_keywords = ['调查', '违规', '亏损', '退市', '停牌', '诉讼', '下滑', '风波', '调整', '收紧']
-    
+    # 增加严重程度要求
+    if event.severity not in [EventSeverity.HIGH, EventSeverity.CRITICAL]:
+        return None
     # 检查正面关键词
     if any(keyword in event.title or keyword in ' '.join(event.keywords) 
            for keyword in positive_keywords):
         return {
             'symbol': event.symbol,
             'signal': 1,
-            'strength': 0.8,
-            'reason': f'正面关键词触发: {event.title}',
+            'strength': 0.9,
+            'reason': f'重要正面关键词触发: {event.title}',
             'timestamp': event.timestamp,
             'event_id': event.event_id
         }
@@ -79,8 +81,8 @@ def keyword_trigger_rule(event: MarketEvent) -> Optional[Dict]:
         return {
             'symbol': event.symbol,
             'signal': -1,
-            'strength': 0.8,
-            'reason': f'负面关键词触发: {event.title}',
+            'strength': 0.9,
+            'reason': f'重要负面关键词触发: {event.title}',
             'timestamp': event.timestamp,
             'event_id': event.event_id
         }

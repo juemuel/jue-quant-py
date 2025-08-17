@@ -142,7 +142,7 @@ def analyze_unified_signals(unified_result):
             if strength > 0:
                 signal_strengths.append(strength)
         
-        result += "\n信号类型分布:\n"
+        result += "\n统一后的信号类型分布:\n"
         for sig_type, count in signal_types.items():
             result += f"  - {sig_type}: {count}个\n"
         
