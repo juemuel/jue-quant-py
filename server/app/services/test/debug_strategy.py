@@ -351,38 +351,48 @@ def debug_unified_signals():
         data_signal_config = {
             'ma_crossover': {
                 'enable': True,
+                'use_parameterized': False,  # 新增字段：是否使用参数化版本
                 'short_period': 5, 
-                'long_period': 20
+                'long_period': 20,
+                'volatility_threshold': 0.3,
+                'adaptive': False
             },
             'rsi': {
                 'enable': True,
+                'use_parameterized': True,   # 使用参数化版本
                 'period': 14, 
                 'oversold': 30, 
-                'overbought': 70
-            },
-            # 是否开启默认规则驱动,当开启时默认规则会覆盖除了enable参数以外的所有参数,并应用自适应规则
-            'rule_based': { 
-                'enable': True
+                'overbought': 70,
+                'volume_confirmation': False
             }
         }
         # 事件驱动信号配置
         event_signal_config = {
             'news_sentiment': {
                 'enable': True,
-                'threshold': 0.7
+                'use_parameterized': True,  # 使用参数化版本
+                'sentiment_threshold': 0.8,  # 自定义阈值
+                'severity_levels': [EventSeverity.HIGH, EventSeverity.CRITICAL]
             },
             'earnings': {
                 'enable': True,
-                'anticipation_days': 3
+                'use_parameterized': False  # 使用固定参数版本
             },
             'keyword_trigger': {
                 'enable': True,
-                'strength': 0.6
+                'use_parameterized': True,  # 使用参数化版本
+                'positive_keywords': ['突破', '创新高', '利好'],
+                'negative_keywords': ['暴跌', '亏损', '风险'],
+                'strength': 0.7,
             }
         }
         print("✓ 信号配置完成")
         print(f"  - 数据驱动信号: MA交叉({data_signal_config['ma_crossover']['short_period']},{data_signal_config['ma_crossover']['long_period']}), RSI({data_signal_config['rsi']['period']})")
-        print(f"  - 事件驱动信号: 新闻情绪(阈值{event_signal_config['news_sentiment']['threshold']}), 财报预期({event_signal_config['earnings']['anticipation_days']}天)")
+         # 安全地访问事件信号配置
+        news_threshold = event_signal_config.get('news_sentiment', {}).get('sentiment_threshold', '默认')
+        earnings_info = "参数化" if event_signal_config.get('earnings', {}).get('use_parameterized', False) else "固定参数"
+        keyword_strength = event_signal_config.get('keyword_trigger', {}).get('strength', '默认')
+        print(f"  - 事件驱动信号: 新闻情绪(阈值{news_threshold}), 财报预期({earnings_info}), 关键词触发(强度{keyword_strength})")
         
         print("\n4. 生成统一信号...")
         # 4.1 生成统一组合信号

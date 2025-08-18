@@ -1,13 +1,17 @@
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Callable
+from functools import partial
 import pandas as pd
 import numpy as np
 from dataclasses import dataclass
 from datetime import datetime
+# 更新规则名称字典，区分固定和参数化版本
 RULE_NAMES = {
-    'adaptive_ma_crossover_rule': '自适应均线交叉规则',
-    'multi_confirmation_rsi_rule': '多重确认RSI规则', 
-    'trend_strength_filter_rule': '趋势强度过滤规则',
-    'support_resistance_breakout_rule': '支撑阻力突破规则'
+    'adaptive_ma_crossover_rule': '自适应均线交叉规则(固定参数)',
+    'multi_confirmation_rsi_rule': '多重确认RSI规则(固定参数)', 
+    'trend_strength_filter_rule': '趋势强度过滤规则(固定参数)',
+    'support_resistance_breakout_rule': '支撑阻力突破规则(固定参数)',
+    'adaptive_ma_crossover_rule_with_params': '自适应均线交叉规则(参数化)',
+    'multi_confirmation_rsi_rule_with_params': '多重确认RSI规则(参数化)',
 }
 @dataclass
 class TechnicalSignalContext:
@@ -18,27 +22,46 @@ class TechnicalSignalContext:
     volume: float
     indicators: Dict[str, float]  # 技术指标值
     market_context: Dict[str, float]  # 市场环境
-    
+
 # 动态均线交叉规则
 def adaptive_ma_crossover_rule(context: TechnicalSignalContext) -> Optional[Dict]:
-    """自适应均线交叉规则"""
+    """自适应均线交叉规则（固定参数版本）"""
+    return adaptive_ma_crossover_rule_with_params(context, volatility_threshold=0.3, adaptive=False)
+def adaptive_ma_crossover_rule_with_params(context: TechnicalSignalContext,
+                                         short_period: int = 5,
+                                         long_period: int = 20,
+                                         volatility_threshold: float = 0.3,
+                                         adaptive: bool = False) -> Optional[Dict]:
+    """
+    参数化的自适应均线交叉规则
+    :param context: TechnicalSignalContext, 技术指标上下文
+    :param short_period: 短均线周期
+    :param long_period: 长均线周期
+    :param volatility_threshold: 波动率阈值
+    :param adaptive: 是否自适应（默认不开启）
+    """
     indicators = context.indicators
-     # 根据可用的指标选择最佳组合，而不是固定选择
-    available_mas = [key for key in indicators.keys() if key.startswith('MA')]
-    if len(available_mas) < 2:
-        return None
-     # 根据市场波动率和可用指标选择最佳组合
-    volatility = context.market_context.get('volatility', 0.2)
-    if volatility > 0.3 and 'MA3' in available_mas and 'MA10' in available_mas:
-        short_ma_key, long_ma_key = 'MA3', 'MA10'
-    elif 'MA5' in available_mas and 'MA20' in available_mas:
-        short_ma_key, long_ma_key = 'MA5', 'MA20'
+    
+    if adaptive:
+        # 自适应逻辑
+        available_mas = [key for key in indicators.keys() if key.startswith('MA')]
+        if len(available_mas) < 2:
+            return None
+        
+        volatility = context.market_context.get('volatility', 0.2)
+        if volatility > volatility_threshold and 'MA3' in available_mas and 'MA10' in available_mas:
+            short_ma_key, long_ma_key = 'MA3', 'MA10'
+        elif f'MA{short_period}' in available_mas and f'MA{long_period}' in available_mas:
+            short_ma_key, long_ma_key = f'MA{short_period}', f'MA{long_period}'
+        else:
+            # 使用可用的最短和最长周期
+            periods = [int(ma[2:]) for ma in available_mas]
+            periods.sort()
+            short_ma_key, long_ma_key = f'MA{periods[0]}', f'MA{periods[-1]}'
     else:
-        # 使用可用的最短和最长周期
-        periods = [int(ma[2:]) for ma in available_mas]
-        periods.sort()
-        short_ma_key, long_ma_key = f'MA{periods[0]}', f'MA{periods[-1]}'
-
+        # 固定周期
+        short_ma_key, long_ma_key = f'MA{short_period}', f'MA{long_period}'
+    
     if short_ma_key not in indicators or long_ma_key not in indicators:
         return None
     
@@ -57,13 +80,12 @@ def adaptive_ma_crossover_rule(context: TechnicalSignalContext) -> Optional[Dict
     
     # 金叉买入
     if short_ma > long_ma and short_ma_prev <= long_ma_prev:
-        # 信号强度基于价格距离均线的程度
         strength = min((short_ma - long_ma) / long_ma, 1.0)
         return {
             'symbol': context.symbol,
-            'signal': 1, # 1表示买入
+            'signal': 1,
             'strength': strength,
-            'reason': f'自适应均线金叉{short_ma_key}>{long_ma_key}({short_ma:.2f}>{long_ma:.2f}),年化波动率{volatility:.3f}',
+            'reason': f'均线金叉{short_ma_key}>{long_ma_key}({short_ma:.2f}>{long_ma:.2f}),参数({short_period}/{long_period})',
             'timestamp': context.timestamp,
             'indicators_used': [short_ma_key, long_ma_key]
         }
@@ -73,16 +95,32 @@ def adaptive_ma_crossover_rule(context: TechnicalSignalContext) -> Optional[Dict
         strength = min((long_ma - short_ma) / long_ma, 1.0)
         return {
             'symbol': context.symbol,
-            'signal': -1, # -1表示卖出
+            'signal': -1,
             'strength': strength,
-            'reason': f'自适应均线死叉{short_ma_key}<{long_ma_key} ({short_ma:.2f}<{long_ma:.2f}),年化波动率{volatility:.3f}',
+            'reason': f'均线死叉{short_ma_key}<{long_ma_key}({short_ma:.2f}<{long_ma:.2f}),参数({short_period}/{long_period})',
             'timestamp': context.timestamp,
             'indicators_used': [short_ma_key, long_ma_key]
         }
     return None
+
 # 多重确认RSI规则
 def multi_confirmation_rsi_rule(context: TechnicalSignalContext) -> Optional[Dict]:
-    """多重确认RSI规则"""
+    """多重确认RSI规则（固定参数版本）"""
+    return multi_confirmation_rsi_rule_with_params(context, oversold=30, overbought=70, 
+                                                  volume_confirmation=False)
+def multi_confirmation_rsi_rule_with_params(context: TechnicalSignalContext,
+                                           period: int = 14,
+                                           oversold: float = 30,
+                                           overbought: float = 70,
+                                           volume_confirmation: bool = False) -> Optional[Dict]:
+    """
+    参数化的多重确认RSI规则
+    :param context: TechnicalSignalContext对象
+    :param period: RSI周期
+    :param oversold: 超卖阈值
+    :param overbought: 超买阈值
+    :param volume_confirmation: 是否需要成交量确认（默认不开启）
+    """
     indicators = context.indicators
     
     if 'RSI' not in indicators:
@@ -99,43 +137,41 @@ def multi_confirmation_rsi_rule(context: TechnicalSignalContext) -> Optional[Dic
         volume is None or pd.isna(volume)):
         return None
     
-    if avg_volume is None or pd.isna(avg_volume):
-        avg_volume = 0
-    
-    # 动态调整RSI阈值
-    volatility = context.market_context.get('volatility', 0.2)
-    if volatility > 0.3:  # 高波动市场，更严格的阈值
-        oversold, overbought = 25, 75
-    else:  # 低波动市场，标准阈值
-        oversold, overbought = 30, 70
-
-    volume_ratio = volume / avg_volume if avg_volume > 0 else 0
-    # 超卖买入（需要成交量确认）
-    if rsi < oversold and volume > avg_volume * 1.2:
+    # RSI超卖买入
+    if rsi < oversold:
+        # 成交量确认
+        if volume_confirmation and volume <= avg_volume:
+            return None
+        
         strength = (oversold - rsi) / oversold
         return {
             'symbol': context.symbol,
             'signal': 1,
-            'strength': strength,
-            'reason': f'RSI超卖+成交量确认 (RSI:{rsi:.1f}<{oversold}, 成交量:{volume_ratio:.1f}x, 波动率:{volatility:.3f})',
+            'strength': min(strength, 1.0),
+            'reason': f'RSI超卖买入({rsi:.1f}<{oversold}),参数({period}/{oversold}/{overbought})',
             'timestamp': context.timestamp,
-            'indicators_used': ['RSI', 'Volume']
+            'indicators_used': ['RSI']
         }
     
-    # 超买卖出（需要成交量确认）
-    elif rsi > overbought and volume > avg_volume * 1.2:
+    # RSI超买卖出
+    elif rsi > overbought:
+        # 成交量确认
+        if volume_confirmation and volume <= avg_volume:
+            return None
+        
         strength = (rsi - overbought) / (100 - overbought)
         return {
             'symbol': context.symbol,
             'signal': -1,
-            'strength': strength,
-            'reason': f'RSI超买+成交量确认 (RSI:{rsi:.1f}>{overbought}, 成交量:{volume_ratio:.1f}x, 波动率:{volatility:.3f})',
+            'strength': min(strength, 1.0),
+            'reason': f'RSI超买卖出({rsi:.1f}>{overbought}),参数({period}/{oversold}/{overbought})',
             'timestamp': context.timestamp,
-            'indicators_used': ['RSI', 'Volume']
+            'indicators_used': ['RSI']
         }
     
     return None
-# 趋势强度过滤规则
+
+# 趋势强度过滤规则(TODO)
 def trend_strength_filter_rule(context: TechnicalSignalContext) -> Optional[Dict]:
     """趋势强度过滤规则"""
     indicators = context.indicators
@@ -174,7 +210,7 @@ def trend_strength_filter_rule(context: TechnicalSignalContext) -> Optional[Dict
             }
     
     return None
-# 支撑阻力突破规则
+# 支撑阻力突破规则(TODO)
 def support_resistance_breakout_rule(context: TechnicalSignalContext) -> Optional[Dict]:
     """支撑阻力突破规则"""
     indicators = context.indicators
@@ -222,7 +258,31 @@ def support_resistance_breakout_rule(context: TechnicalSignalContext) -> Optiona
     
     return None
 
-adaptive_ma_crossover_rule.chinese_name = '自适应均线交叉规则'
-multi_confirmation_rsi_rule.chinese_name = '多重确认RSI规则'
-trend_strength_filter_rule.chinese_name = '趋势强度过滤规则'
-support_resistance_breakout_rule.chinese_name = '支撑阻力突破规则'
+# 创建规则
+def create_parameterized_ma_rule(short_period: int = 5, long_period: int = 20, 
+                                volatility_threshold: float = 0.3, adaptive: bool = False) -> callable:
+    """创建参数化的MA交叉规则"""
+    rule = partial(adaptive_ma_crossover_rule_with_params, 
+                  short_period=short_period, long_period=long_period,
+                  volatility_threshold=volatility_threshold, adaptive=adaptive)
+    rule.chinese_name = f'自适应MA交叉规则(参数化:{short_period}/{long_period})'
+    rule.__name__ = f'ma_crossover_rule_parameterized_{short_period}_{long_period}'
+    return rule
+
+def create_parameterized_rsi_rule(period: int = 14, oversold: int = 30, 
+                                 overbought: int = 70, volume_confirmation: bool = False) -> callable:
+    """创建参数化的RSI规则"""
+    rule = partial(multi_confirmation_rsi_rule_with_params,
+                  period=period, oversold=oversold, overbought=overbought,
+                  volume_confirmation=volume_confirmation)
+    rule.chinese_name = f'多重确认RSI规则(参数化:{period}/{oversold}/{overbought})'
+    rule.__name__ = f'rsi_rule_parameterized_{period}_{oversold}_{overbought}'
+    return rule
+
+# 中文名称
+adaptive_ma_crossover_rule.chinese_name = '自适应均线交叉规则(固定参数)'
+multi_confirmation_rsi_rule.chinese_name = '多重确认RSI规则(固定参数)'
+trend_strength_filter_rule.chinese_name = '趋势强度过滤规则(固定参数)'
+support_resistance_breakout_rule.chinese_name = '支撑阻力突破规则(固定参数)'
+adaptive_ma_crossover_rule_with_params.chinese_name = '自适应均线交叉规则(参数化)'
+multi_confirmation_rsi_rule_with_params.chinese_name = '多重确认RSI规则(参数化)'

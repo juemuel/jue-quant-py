@@ -13,8 +13,10 @@ from .risk_manage_service import (
 from .signal_service import DataSignalGenerator, EventSignalGenerator, UnifiedSignalManager
 from .event_service import MarketEvent, EventType, EventSeverity 
 from .signal_rules.data_signal_rules import (
-    adaptive_ma_crossover_rule, 
+    adaptive_ma_crossover_rule,
+    create_parameterized_ma_rule, 
     multi_confirmation_rsi_rule,
+    create_parameterized_rsi_rule,
     trend_strength_filter_rule,
     support_resistance_breakout_rule
 )
@@ -22,6 +24,9 @@ from .signal_rules.event_signal_rules import (
     news_sentiment_rule,
     earnings_anticipation_rule,
     keyword_trigger_rule,
+    create_parameterized_news_rule,
+    create_parameterized_earnings_rule,
+    create_parameterized_keyword_rule
 )
 # ============ 价格数据信号 ============
 # 1.1.1 单信号-均线交叉信号 - 基于价格计算的移动平均线[在基础单信号生成中已验证]
@@ -577,102 +582,197 @@ def generate_unified_signals(price_data: pd.DataFrame, events_data: List[Dict] =
     
     try:
         unified_manager = UnifiedSignalManager()
-        
-        # 配置数据驱动信号
+        # 配置不传入时的数据驱动信号（默认使用固定参数版本）
         if data_signal_config is None:
             data_signal_config = {
-                'ma_crossover': {'short_period': 5, 'long_period': 20},
-                'rsi': {'period': 14, 'oversold': 30, 'overbought': 70},
-                'rule_based': {'enable': True}
+                'ma_crossover': {
+                    'enable': True,
+                    'use_parameterized': False  # 默认使用固定参数版本
+                },
+                'rsi': {
+                    'enable': True,
+                    'use_parameterized': False  # 默认使用固定参数版本
+                }
             }
-        
-        # 配置事件驱动信号
+        # 配置默认事件驱动信号
         if event_signal_config is None:
             event_signal_config = {
-                'news_sentiment': {'threshold': 0.7},
-                'earnings': {'anticipation_days': 3},
-                'keyword_trigger': {'strength': 0.6}
+                'news_sentiment': {
+                    'enable': True,
+                    'use_parameterized': False  # 默认使用固定参数版本
+                },
+                'earnings': {
+                    'enable': True,
+                    'use_parameterized': False  # 默认使用固定参数版本
+                },
+                'keyword_trigger': {
+                    'enable': True,
+                    'use_parameterized': False  # 默认使用固定参数版本
+                }
             }
         
         # 生成数据驱动信号
         data_signals = []
-        if data_signal_config.get('rule_based', {}).get('enable', True):
-            # 使用DataSignalGenerator生成规则驱动的信号
+        try:
             data_generator = DataSignalGenerator()
-            # 添加信号规则
-            data_generator.add_signal_rule(adaptive_ma_crossover_rule)
-            data_generator.add_signal_rule(multi_confirmation_rsi_rule)
+            # 处理均线交叉规则
+            if data_signal_config.get('ma_crossover', {}).get('enable', True):
+                try:
+                    ma_config = data_signal_config.get('ma_crossover', {})
+                    if ma_config.get('use_parameterized', False):
+                        ma_rule = create_parameterized_ma_rule(
+                            short_period=ma_config.get('short_period', 5),
+                            long_period=ma_config.get('long_period', 20),
+                            volatility_threshold=ma_config.get('volatility_threshold', 0.3),
+                            adaptive=ma_config.get('adaptive', False)
+                        )
+                        data_generator.add_signal_rule(ma_rule)
+                    else:
+                        data_generator.add_signal_rule(adaptive_ma_crossover_rule)
+                except Exception as e:
+                    logger.error(f"[Strategy]MA交叉规则配置失败: {e}")
+            # 处理RSI规则
+            if data_signal_config.get('rsi', {}).get('enable', True):
+                try:
+                    rsi_config = data_signal_config.get('rsi', {})
+                    if rsi_config.get('use_parameterized', False):
+                        rsi_rule = create_parameterized_rsi_rule(
+                            period=rsi_config.get('period', 14),
+                            oversold=rsi_config.get('oversold', 30),
+                            overbought=rsi_config.get('overbought', 70),
+                            volume_confirmation=rsi_config.get('volume_confirmation', False)
+                        )
+                        data_generator.add_signal_rule(rsi_rule)
+                    else:
+                        data_generator.add_signal_rule(multi_confirmation_rsi_rule)
+                except Exception as e:
+                    logger.error(f"[Strategy]RSI规则配置失败: {e}")
+                    
             # 计算技术指标
             indicators = {}
             if data_signal_config.get('ma_crossover', {}).get('enable', True):
-                ma_result = analytic_service.calculate_moving_averages(
-                    price_data, 
-                    [3, 5, 10, 20]  # 包含所有可能的周期
-                )
-                # ma_result = analytic_service.calculate_moving_averages(
-                #     price_data, 
-                #     [data_signal_config['ma_crossover']['short_period'], 
-                #     data_signal_config['ma_crossover']['long_period']]
-                # )
-                if ma_result['status'] == 'success':
-                    ma_df = pd.DataFrame(ma_result['data'])
-                    for col in ma_df.columns:
-                        if col.startswith('MA'):
-                            indicators[col] = ma_df[col]
-            if data_signal_config.get('rsi', {}).get('enable', True):
-                rsi_result = analytic_service.calculate_rsi(
-                    price_data, 
-                    data_signal_config['rsi']['period']
-                )
-                if rsi_result['status'] == 'success':
-                    rsi_df = pd.DataFrame(rsi_result['data'])
-                    logger.info(f"[Strategy]RSI DataFrame列: {rsi_df.columns.tolist()}")
-                    logger.info(f"[Strategy]RSI列数据类型: {rsi_df['RSI'].dtype if 'RSI' in rsi_df.columns else 'RSI列不存在'}")
+                try:
+                    ma_result = analytic_service.calculate_moving_averages(
+                        price_data, 
+                        [3, 5, 10, 20]  # 包含所有可能的周期
+                    )
+                    if ma_result['status'] == 'success':
+                        ma_df = pd.DataFrame(ma_result['data'])
+                        for col in ma_df.columns:
+                            if col.startswith('MA'):
+                                indicators[col] = ma_df[col]
+                except Exception as e:
+                    logger.error(f"[Strategy]MA指标计算失败: {e}")
                     
-                    # 确保RSI列是数值类型
-                    if 'RSI' in rsi_df.columns:
-                        rsi_df['RSI'] = pd.to_numeric(rsi_df['RSI'], errors='coerce')
-                        logger.info(f"[Strategy]RSI转换后数据类型: {rsi_df['RSI'].dtype}")
-                        indicators['RSI'] = rsi_df['RSI']
-                        logger.info(f"[Strategy]indicators['RSI']数据类型: {indicators['RSI'].dtype}")
-                    else:
-                        logger.error(f"[Strategy]RSI列不存在于DataFrame中")
+            if data_signal_config.get('rsi', {}).get('enable', True):
+                try:
+                    rsi_result = analytic_service.calculate_rsi(
+                        price_data, 
+                        data_signal_config.get('rsi', {}).get('period', 14)
+                    )
+                    if rsi_result['status'] == 'success':
+                        rsi_df = pd.DataFrame(rsi_result['data'])
+                        logger.info(f"[Strategy]RSI DataFrame列: {rsi_df.columns.tolist()}")
+                        
+                        # 确保RSI列是数值类型
+                        if 'RSI' in rsi_df.columns:
+                            rsi_df['RSI'] = pd.to_numeric(rsi_df['RSI'], errors='coerce')
+                            indicators['RSI'] = rsi_df['RSI']
+                            logger.info(f"[Strategy]RSI指标计算成功")
+                        else:
+                            logger.error(f"[Strategy]RSI列不存在于DataFrame中")
+                except Exception as e:
+                    logger.error(f"[Strategy]RSI指标计算失败: {e}")
+                    
             # 生成信号
             data_signals = data_generator.generate_signals(price_data, indicators)
             logger.info(f"[Strategy]原生数据驱动信号生成完成，信号数量: {len(data_signals)}")
-        
+            
+        except Exception as e:
+            logger.error(f"[Strategy]数据驱动信号生成失败: {e}")
+            data_signals = []
+
         # 生成事件驱动信号
         event_signals = []
         if events_data:
-            # 使用EventSignalGenerator统一生成所有事件信号
-            event_generator = EventSignalGenerator()
-            # 根据配置添加相应的规则
-            if event_signal_config.get('news_sentiment', {}).get('enable', True):
-                event_generator.add_rule(news_sentiment_rule)
-            
-            if event_signal_config.get('earnings', {}).get('enable', True):
-                event_generator.add_rule(earnings_anticipation_rule)
-            
-            if event_signal_config.get('keyword_trigger', {}).get('enable', True):
-                event_generator.add_rule(keyword_trigger_rule)
-            # 转换事件数据为MarketEvent对象
-            market_events = []
-            for event_data in events_data:
-                try:
-                    if isinstance(event_data, MarketEvent):
-                        market_events.append(event_data)
-                    elif isinstance(event_data, dict):
-                        event = MarketEvent(**event_data)
-                        market_events.append(event)
-                except Exception as e:
-                    logger.warning(f"[Strategy]跳过无效事件数据: {e}")
-                    continue
-            # 生成信号
-            event_signals = event_generator.generate_signals(market_events)
-            logger.info(f"[Strategy]原生事件驱动信号生成完成，信号数量: {len(event_signals)}")
+            try:
+                event_generator = EventSignalGenerator()
+                
+                # 处理新闻情感规则
+                if event_signal_config.get('news_sentiment', {}).get('enable', True):
+                    try:
+                        news_config = event_signal_config.get('news_sentiment', {})
+                        if news_config.get('use_parameterized', False):
+                            news_rule = create_parameterized_news_rule(
+                                sentiment_threshold=news_config.get('sentiment_threshold', 0.7),
+                                severity_levels=news_config.get('severity_levels', [EventSeverity.HIGH, EventSeverity.CRITICAL])
+                            )
+                            event_generator.add_rule(news_rule)
+                        else:
+                            event_generator.add_rule(news_sentiment_rule)
+                    except Exception as e:
+                        logger.error(f"[Strategy]新闻情感规则配置失败: {e}")
+                
+                # 处理财报预期规则
+                if event_signal_config.get('earnings', {}).get('enable', True):
+                    try:
+                        earnings_config = event_signal_config.get('earnings', {})
+                        if earnings_config.get('use_parameterized', False):
+                            earnings_rule = create_parameterized_earnings_rule(
+                                anticipation_days_min=earnings_config.get('anticipation_days_min', 1),
+                                anticipation_days_max=earnings_config.get('anticipation_days_max', 3),
+                                signal_strength=earnings_config.get('signal_strength', 0.5)
+                            )
+                            event_generator.add_rule(earnings_rule)
+                        else:
+                            event_generator.add_rule(earnings_anticipation_rule)
+                    except Exception as e:
+                        logger.error(f"[Strategy]财报预期规则配置失败: {e}")
+                
+                # 处理关键词触发规则
+                if event_signal_config.get('keyword_trigger', {}).get('enable', True):
+                    try:
+                        keyword_config = event_signal_config.get('keyword_trigger', {})
+                        if keyword_config.get('use_parameterized', False):
+                            keyword_rule = create_parameterized_keyword_rule(
+                                positive_keywords=keyword_config.get('positive_keywords', ['利好', '上涨', '增长']),
+                                negative_keywords=keyword_config.get('negative_keywords', ['利空', '下跌', '亏损']),
+                                severity_levels=keyword_config.get('severity_levels', [EventSeverity.MEDIUM, EventSeverity.HIGH]),
+                                strength=keyword_config.get('strength', 0.9)
+                            )
+                            event_generator.add_rule(keyword_rule)
+                        else:
+                            event_generator.add_rule(keyword_trigger_rule)
+                    except Exception as e:
+                        logger.error(f"[Strategy]关键词触发规则配置失败: {e}")
+                
+                # 转换事件数据为MarketEvent对象
+                market_events = []
+                for event_data in events_data:
+                    try:
+                        if isinstance(event_data, MarketEvent):
+                            market_events.append(event_data)
+                        elif isinstance(event_data, dict):
+                            event = MarketEvent(**event_data)
+                            market_events.append(event)
+                    except Exception as e:
+                        logger.warning(f"[Strategy]跳过无效事件数据: {e}")
+                        continue
+                        
+                # 生成信号
+                event_signals = event_generator.generate_signals(market_events)
+                logger.info(f"[Strategy]原生事件驱动信号生成完成，信号数量: {len(event_signals)}")
+                
+            except Exception as e:
+                logger.error(f"[Strategy]事件驱动信号生成失败: {e}")
+                event_signals = []
 
         # 合并和优化信号
-        unified_signals = unified_manager.merge_signals(data_signals, event_signals)
+        try:
+            unified_signals = unified_manager.merge_signals(data_signals, event_signals)
+        except Exception as e:
+            logger.error(f"[Strategy]信号合并失败: {e}")
+            unified_signals = data_signals + event_signals  # 简单合并作为备选方案
         
         return {
             "status": "success",
