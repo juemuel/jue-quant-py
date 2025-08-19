@@ -3,8 +3,8 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
 
 from app.services.data_service import get_stock_history
-from app.services.analytic_service import calculate_moving_averages, calculate_rsi
-from app.services.strategy_service import generate_ma_crossover_signal, generate_rsi_signal
+from app.services.indicator_service import IndicatorCalculator
+from app.services.strategy_service import generate_ma_crossover_signal_from_indicators, generate_rsi_signal_from_indicators
 from app.services.strategy_service import generate_unified_signals
 from app.services.event_service import MarketEvent, EventType, EventSeverity
 import datetime
@@ -95,12 +95,17 @@ def analyze_basic_signals(signal_df, signal_name="信号", display_columns=None)
         result += f"\n没有生成任何{signal_name}"
     
     return result
-def calculate_and_validate_indicator(df, indicator_func, indicator_name, **kwargs):
+def calculate_and_validate_indicator(df, calculator_method, indicator_name, **kwargs):
     """
     计算技术指标并验证结果的通用方法
+    使用新的 IndicatorCalculator
     """
     try:
-        result = indicator_func(df, **kwargs)
+        # 创建计算器实例
+        calculator = IndicatorCalculator()
+        
+        # 调用计算器方法
+        result = calculator_method(calculator, df, **kwargs)
         
         if result.get('status') != 'success':
             return False, None, f"{indicator_name}计算失败: {result.get('message')}"
@@ -259,6 +264,7 @@ def create_mock_events_data(df=None, event_count=20):
 # MA使用简单的金叉死叉判断,固定使用MA5和MA20
 # RSI固定阈值超卖30,超买70,触及就生成
 def debug_basic_strategy_flow():
+
     """
     使用封装方法的简化版基础策略流程调试
     """
@@ -274,7 +280,7 @@ def debug_basic_strategy_flow():
         
         # 2. 计算移动平均线
         success, df_with_ma, message = calculate_and_validate_indicator(
-            df, calculate_moving_averages, "移动平均线", periods=[5, 20]
+            df, IndicatorCalculator.calculate_moving_averages, "移动平均线", periods=[5, 20]
         )
         if not success:
             print(f"✗ {message}")
@@ -282,11 +288,18 @@ def debug_basic_strategy_flow():
         print(f"✓ {message}")
         
         # 确保数值类型
-        df_with_ma = ensure_numeric_columns(df_with_ma, ['收盘价', '收盘', 'MA5', 'MA20'])
+        # 确保数值类型 - 注意新的列名格式是 SMA5, SMA20
+        df_with_ma = ensure_numeric_columns(df_with_ma, ['收盘价', '收盘', 'SMA5', 'SMA20'])
         
+        # 重命名列以保持兼容性
+        if 'SMA5' in df_with_ma.columns:
+            df_with_ma['MA5'] = df_with_ma['SMA5']
+        if 'SMA20' in df_with_ma.columns:
+            df_with_ma['MA20'] = df_with_ma['SMA20']
+            
         # 3. 计算RSI
         success, df_with_rsi, message = calculate_and_validate_indicator(
-            df, calculate_rsi, "RSI指标", period=14
+            df, IndicatorCalculator.calculate_rsi, "RSI指标", period=14
         )
         if not success:
             print(f"✗ {message}")
@@ -296,17 +309,28 @@ def debug_basic_strategy_flow():
             df_with_rsi = ensure_numeric_columns(df_with_rsi, ['收盘价', '收盘', 'RSI'])
         
         # 4. 生成MA交叉信号
-        ma_signal_result = generate_ma_crossover_signal(df_with_ma, short_period=5, long_period=20)
+        ma_signal_result = generate_ma_crossover_signal_from_indicators(df_with_ma, short_period=5, long_period=20)
         if ma_signal_result['status'] == 'success':
             signal_df = pd.DataFrame(ma_signal_result['data'])
             print(analyze_basic_signals(signal_df, "MA交叉信号", ['日期', 'MA5', 'MA20', 'signal']))
         
         # 5. 生成RSI信号
-        rsi_signal_result = generate_rsi_signal(df_with_rsi, period=14, oversold=30, overbought=70)
+        rsi_signal_result = generate_rsi_signal_from_indicators(df_with_rsi, period=14, oversold=30, overbought=70)
+        print(f"RSI信号生成结果状态: {rsi_signal_result['status']}")
         if rsi_signal_result['status'] == 'success':
             signal_df = pd.DataFrame(rsi_signal_result['data'])
             print(analyze_basic_signals(signal_df, "RSI信号", ['日期', '收盘价', 'RSI', 'signal']))
-        
+        else:
+            print(f"RSI信号生成失败: {rsi_signal_result.get('message', '未知错误')}")
+            # 额外调试信息
+            print(f"df_with_rsi的形状: {df_with_rsi.shape}")
+            print(f"df_with_rsi的列: {df_with_rsi.columns.tolist()}")
+            if 'RSI' in df_with_rsi.columns:
+                print(f"RSI列的数据类型: {df_with_rsi['RSI'].dtype}")
+                print(f"RSI列的前5个值: {df_with_rsi['RSI'].head().tolist()}")
+                print(f"RSI列中NaN的数量: {df_with_rsi['RSI'].isna().sum()}")
+            else:
+                print("df_with_rsi中没有RSI列！")
         print("\n=== 基础策略流程调试完成 ===")
         
     except Exception as e:
@@ -347,26 +371,36 @@ def debug_unified_signals():
         # 3. 配置信号生成参数
         print("\n3. 配置信号生成参数...")
         
-        # 数据驱动信号配置
+        # 数据驱动信号规则配置
         data_signal_config = {
             'ma_crossover': {
                 'enable': True,
-                'use_parameterized': False,  # 新增字段：是否使用参数化版本
-                'short_period': 5, 
-                'long_period': 20,
-                'volatility_threshold': 0.3,
-                'adaptive': False
+                'use_parameterized': False,  # 改为False，使用固定参数版本，与debug_basic_strategy_flow一致
+                'short_period': 5,           # 与debug_basic_strategy_flow相同
+                'long_period': 20,           # 与debug_basic_strategy_flow相同
+                'adaptive': True,
+                'filter_config': {
+                    'volatility_filter': {'enable': False, 'min_volatility': 0.3, 'max_volatility': 1},  # 禁用过滤器
+                    'volume_confirmation': {'enable': False, 'volume_multiplier': 1, 'lookback_days': 20},
+                    'trend_strength_filter': {'enable': False, 'min_adx': 25},
+                    'signal_strength_filter': {'enable': False, 'min_strength': 0.3}
+                }
             },
             'rsi': {
                 'enable': True,
-                'use_parameterized': True,   # 使用参数化版本
-                'period': 14, 
-                'oversold': 30, 
-                'overbought': 70,
-                'volume_confirmation': False
+                'use_parameterized': False,  # 改为False，使用固定参数版本
+                'period': 14,                # 与debug_basic_strategy_flow相同
+                'oversold': 30,              # 与debug_basic_strategy_flow相同
+                'overbought': 70,            # 与debug_basic_strategy_flow相同
+                'filter_config': {
+                    'volume_confirmation': {'enable': False, 'volume_multiplier': 1, 'lookback_days': 20},  # 禁用过滤器
+                    'volatility_filter': {'enable': False, 'min_volatility': 0.3, 'max_volatility': 0.5},
+                    'trend_strength_filter': {'enable': False, 'min_adx': 25},
+                    'signal_strength_filter': {'enable': False, 'min_strength': 0.3}
+                }
             }
         }
-        # 事件驱动信号配置
+        # 事件驱动信号规则配置
         event_signal_config = {
             'news_sentiment': {
                 'enable': True,
@@ -393,7 +427,7 @@ def debug_unified_signals():
         earnings_info = "参数化" if event_signal_config.get('earnings', {}).get('use_parameterized', False) else "固定参数"
         keyword_strength = event_signal_config.get('keyword_trigger', {}).get('strength', '默认')
         print(f"  - 事件驱动信号: 新闻情绪(阈值{news_threshold}), 财报预期({earnings_info}), 关键词触发(强度{keyword_strength})")
-        
+
         print("\n4. 生成统一信号...")
         # 4.1 生成统一组合信号
         unified_result = generate_unified_signals(

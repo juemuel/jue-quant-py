@@ -8,7 +8,7 @@ from datetime import datetime
 from .signal_rules.data_signal_rules import (
     TechnicalSignalContext,
     adaptive_ma_crossover_rule,
-    multi_confirmation_rsi_rule,
+    adaptive_rsi_rule,
     trend_strength_filter_rule,
     support_resistance_breakout_rule
 )
@@ -51,9 +51,9 @@ class DataSignalGenerator:
         logger.info(f"[SignalService]可用指标: {list(indicators.keys())}")
         for name, series in indicators.items():
             valid_count = series.notna().sum()
-            logger.info(f"[SignalService]指标 {name}: 长度={len(series)}, 有效值数量={valid_count}, 类型={series.dtype}")
-            if len(series) > 0:
-                logger.info(f"[SignalService]指标 {name} 样本值: 索引20={series.iloc[20] if len(series) > 20 else 'N/A'}, 索引50={series.iloc[50] if len(series) > 50 else 'N/A'}")
+            # logger.info(f"[SignalService]指标 {name}: 长度={len(series)}, 有效值数量={valid_count}, 类型={series.dtype}")
+            # if len(series) > 0:
+            #     logger.info(f"[SignalService]指标 {name} 样本值: 索引20={series.iloc[20] if len(series) > 20 else 'N/A'}, 索引50={series.iloc[50] if len(series) > 50 else 'N/A'}")
         
         for i in range(1, len(df)):  # 从第二行开始，确保有前一期数据
             row = df.iloc[i]
@@ -94,17 +94,20 @@ class DataSignalGenerator:
             # 应用所有信号规则
             for rule_idx, rule in enumerate(self.signal_rules):
                 try:
+                     # 在循环开始就定义 rule_name，确保在所有分支中都可用
+                    rule_name = getattr(rule, 'chinese_name', rule.__name__ if hasattr(rule, '__name__') else f"规则{rule_idx}")
                     signal = rule(context)
                     if signal:
-                        rule_name = getattr(rule, 'chinese_name', rule.__name__ if hasattr(rule, '__name__') else f"规则{rule_idx}")
                         # 应用过滤规则
                         if self._apply_filters(signal, context):
                             # 应用权重规则
                             signal = self._apply_weights(signal, context)
                             signals.append(signal)
-                            logger.info(f"[SignalService]规则{rule_name}在第{i}行生成信号: 类型={signal.get('signal')}, 强度={signal.get('strength'):.3f}, 原因={signal.get('reason')}, 使用指标={signal.get('indicators_used')}")
+                            if i % 100 == 0:
+                                logger.debug(f"[SignalService]规则{rule_name}在第{i}行生成信号: 类型={signal.get('signal')}, 强度={signal.get('strength'):.3f}, 原因={signal.get('reason')}, 使用指标={signal.get('indicators_used')}")
                         else:
-                            logger.info(f"[SignalService]信号被过滤规则拒绝")
+                            if i % 100 == 0:
+                                logger.debug(f"[SignalService]信号被过滤规则拒绝")
                     else:
                         if i % 100 == 0:  # 每50行记录一次，避免日志过多
                             logger.debug(f"[SignalService]规则{rule_name}在第{i}行未触发(每100的抽样)")
@@ -252,29 +255,24 @@ class EventSignalGenerator:
         
         # 处理每个事件
         for event_idx, event in enumerate(events):
-            # 每25个事件输出一次调试信息
-            if event_idx % 25 == 0:
-                logger.info(f"[EventSignalService]处理第{event_idx}个事件: {event.event_type}, 标题: {event.title[:50]}...")
-            
             # 应用所有事件信号规则
             for rule_idx, rule_func in enumerate(self.signal_rules):
                 try:
                     signal = rule_func(event)
                     if signal:
                         rule_name = getattr(rule_func, 'chinese_name', rule_func.__name__ if hasattr(rule_func, '__name__') else f"事件规则{rule_idx}")
-                        if event_idx % 25 == 0:
-                            logger.info(f"[EventSignalService]{rule_name}对事件{event.event_type}生成信号: 事件类型={event.event_type}, 信号类型={signal.get('signal')}, 强度={signal.get('strength'):.3f}, 原因={signal.get('reason')}, 事件ID={signal.get('event_id')}")
+                        if event_idx % 100 == 0:
+                            logger.debug(f"[EventSignalService]第{event_idx}个事件:{rule_name}对事件{event.event_type}生成信号: 事件类型={event.event_type}, 信号类型={signal.get('signal')}, 强度={signal.get('strength'):.3f}, 原因={signal.get('reason')}, 事件ID={signal.get('event_id')}")
+
                         signals.append(signal)
                     else:
                         if event_idx % 100 == 0:
                             rule_name = getattr(rule_func, 'chinese_name', rule_func.__name__ if hasattr(rule_func, '__name__') else f"事件规则{rule_idx}")
-                            logger.debug(f"[EventSignalService]{rule_name}对事件{event.event_type}未触发(每100的抽样)")
+                            logger.debug(f"[EventSignalService]第{event_idx}个事件:{rule_name}对事件{event.event_type}未触发(每100的抽样)")
                 except Exception as e:
                     rule_name = getattr(rule_func, 'chinese_name', rule_func.__name__ if hasattr(rule_func, '__name__') else f"事件规则{rule_idx}")
-                    logger.error(f"[EventSignalService]{rule_name}处理事件{event_idx}失败: {e}")
+                    logger.error(f"[EventSignalService]第{event_idx}个事件:{rule_name}处理事件{event_idx}失败: {e}")
                     logger.error(f"[EventSignalService]事件详情: 类型={event.event_type}, 标题={event.title}")
-                    import traceback
-                    logger.error(f"[EventSignalService]错误详情: {traceback.format_exc()}")
         
         # 统计生成的信号类型分布
         signal_type_stats = {}
@@ -399,7 +397,7 @@ class UnifiedSignalManager:
         """创建默认数据信号生成器"""
         # 信号规则
         self.data_generator.add_signal_rule(adaptive_ma_crossover_rule)
-        self.data_generator.add_signal_rule(multi_confirmation_rsi_rule)
+        self.data_generator.add_signal_rule(adaptive_rsi_rule)
         # 过滤规则
         self.data_generator.add_filter_rule(trend_strength_filter_rule)
         return self.data_generator
