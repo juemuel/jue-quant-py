@@ -29,6 +29,12 @@ from .signal_rules.event_signal_rules import (
     create_parameterized_keyword_rule
 )
 from .indicator_service import IndicatorCalculator, calculate_indicators_for_strategy
+from datetime import datetime as dt
+import datetime  # 修改这行：导入完整的datetime模块
+import pandas as pd
+from core.logger import logger
+# 添加Excel导出功能
+import openpyxl
 # ============ 价格数据信号 ============
 # 1.1.1 单信号-均线交叉信号 - 基于价格计算的移动平均线
 # 原生无相关指标的df
@@ -888,9 +894,11 @@ def generate_unified_signals(price_data: pd.DataFrame,
             "status": "success",
             "data": {
                 "unified_signals": unified_signals,
+                "total_signals": len(unified_signals),
+                "data_signals": data_signals,  # 添加原始数据信号
+                "event_signals": event_signals,  # 添加原始事件信号
                 "data_signals_count": len(data_signals),
                 "event_signals_count": len(event_signals),
-                "total_signals": len(unified_signals),
                 "enabled_data_rules": enabled_data_rules if 'enabled_data_rules' in locals() else [],
                 "enabled_event_rules": enabled_event_rules if 'enabled_event_rules' in locals() else [],
                 "filter_rules_count": len(filter_rules) if filter_rules is not None else 0,

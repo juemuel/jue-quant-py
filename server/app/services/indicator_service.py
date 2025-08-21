@@ -160,15 +160,40 @@ class IndicatorCalculator:
         try:
             result_df = df.copy()
             
+            # 确定收盘价列名
+            close_col = 'close' if 'close' in df.columns else '收盘'
+            if close_col not in df.columns:
+                return {"status": "error", "message": "未找到收盘价数据"}
+            
             # 计算价格变化
-            delta = df['close'].diff()
+            delta = df[close_col].diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
             loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
             
-            # 计算RSI
-            rs = gain / loss
+            # 添加除0保护 - 使用向量化操作
+            rs = gain / loss.replace(0, np.nan)
             rsi_column = f'RSI{period}'
             result_df[rsi_column] = 100 - (100 / (1 + rs))
+            
+            # 处理边界情况
+            mask_loss_zero = (loss == 0)
+            mask_gain_positive = (gain > 0) & mask_loss_zero
+            mask_gain_zero = (gain == 0) & mask_loss_zero
+            
+            result_df.loc[mask_gain_positive, rsi_column] = 100.0
+            result_df.loc[mask_gain_zero, rsi_column] = 50.0
+            # 添加有效值起始点判断
+            first_valid_idx = result_df[rsi_column].first_valid_index()
+            if first_valid_idx is not None:
+                logger.info(f"[Analytics]RSI 从第{first_valid_idx + 1}个交易日开始有值（索引{first_valid_idx}）")
+                logger.info(f"[Analytics]RSI 需要{period + 1}个交易日的数据才能开始计算")
+            else:
+                logger.warning(f"[Analytics]RSI 没有有效值")
+            
+            result_df[rsi_column] = pd.to_numeric(result_df[rsi_column], errors='coerce')
+            # 关键步骤：添加数据清理
+            from common.utils import clean_numeric_data
+            result_df = clean_numeric_data(result_df)
             
             return self._format_result(result_df, "RSI指标计算完成", [rsi_column])
             
@@ -502,8 +527,8 @@ def calculate_indicators_for_strategy(df: pd.DataFrame,
             rsi_df = pd.DataFrame(rsi_result['data'])
             rsi_column = f'RSI{period}'
             if rsi_column in rsi_df.columns:
-                # 使用包含周期的键名，与MA指标保持一致
-                indicators[rsi_column] = pd.to_numeric(rsi_df[rsi_column], errors='coerce')
+                # 直接使用已经清理过的数据，不再进行pd.to_numeric转换
+                indicators[rsi_column] = rsi_df[rsi_column]
                 # 为了向后兼容，也保留原来的键名
                 indicators['RSI'] = indicators[rsi_column]
     

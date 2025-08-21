@@ -1,5 +1,7 @@
 import sys
 import os
+
+from pkg_resources import non_empty_lines
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
 
 from app.services.data_service import get_stock_history
@@ -7,12 +9,15 @@ from app.services.indicator_service import IndicatorCalculator
 from app.services.strategy_service import generate_ma_crossover_signal_from_indicators, generate_rsi_signal_from_indicators
 from app.services.strategy_service import generate_unified_signals
 from app.services.event_service import MarketEvent, EventType, EventSeverity
-import datetime
+from datetime import datetime as dt
+import datetime  # 修改这行：导入完整的datetime模块
 import pandas as pd
 from core.logger import logger
+# 添加Excel导出功能
+import openpyxl
 # =========== 公用方法 ===========
 def get_and_preprocess_stock_data(source="akshare", code="000001", market="SH", 
-                                 start_date="20240101", end_date="20241201", page_size=1000):
+                                 start_date="20240801", end_date="20241201", page_size=1000):
     """
     获取并预处理股票数据的通用方法
     返回: (success: bool, df: DataFrame, message: str)
@@ -79,18 +84,18 @@ def analyze_basic_signals(signal_df, signal_name="信号", display_columns=None)
     buy_signals = df_copy[df_copy['signal'] == 1]
     sell_signals = df_copy[df_copy['signal'] == -1]
     non_zero_signals = df_copy[df_copy['signal'] != 0]
-    
+
     result = f"\n=== {signal_name}统计分析 ===\n"
     result += f"买入信号数量: {len(buy_signals)}\n"
     result += f"卖出信号数量: {len(sell_signals)}\n"
     
     if len(non_zero_signals) > 0:
-        result += f"\n所有{signal_name}非零信号 ({len(non_zero_signals)}个)，前5如下：\n"
+        result += f"\n所有{signal_name}非零信号 ({len(non_zero_signals)}个)，前10如下：\n"
         if display_columns:
             available_cols = [col for col in display_columns if col in df_copy.columns]
-            result += non_zero_signals[available_cols].head(5).to_string()
+            result += non_zero_signals[available_cols].head(10).to_string()
         else:
-            result += non_zero_signals.head(5).to_string()
+            result += non_zero_signals.head(10).to_string()
     else:
         result += f"\n没有生成任何{signal_name}"
     
@@ -308,30 +313,75 @@ def debug_basic_strategy_flow():
             print(f"✓ {message}")
             df_with_rsi = ensure_numeric_columns(df_with_rsi, ['收盘价', '收盘', 'RSI'])
         
+        # 初始化信号变量
+        ma_signals_row = []
+        rsi_signals_row = []
         # 4. 生成MA交叉信号
+        # 在生成MA信号前添加调试信息
+        logger.debug(f"[Service]df_with_ma列: {df_with_ma.columns.tolist()}")
+        logger.info(f"[DebugBasicStrategy]开始生成MA交叉信号，数据行数: {len(df_with_ma)}")
+        logger.info(f"[DebugBasicStrategy]MA5长度: {len(df_with_ma['MA5']) if 'MA5' in df_with_ma.columns else 0}, MA20长度: {len(df_with_ma['MA20']) if 'MA20' in df_with_ma.columns else 0}")
         ma_signal_result = generate_ma_crossover_signal_from_indicators(df_with_ma, short_period=5, long_period=20)
         if ma_signal_result['status'] == 'success':
-            signal_df = pd.DataFrame(ma_signal_result['data'])
+            ma_signals_row = ma_signal_result['data']
+            signal_df = pd.DataFrame(ma_signals_row)
             print(analyze_basic_signals(signal_df, "MA交叉信号", ['日期', 'MA5', 'MA20', 'signal']))
-        
+        logger.info(f"[DebugBasicStrategy]MA交叉信号数量（含零）: {len(ma_signals_row)}")
         # 5. 生成RSI信号
+        # 在生成RSI信号前添加调试信息
+        logger.info(f"[DebugBasicStrategy]df_with_rsi列: {df_with_rsi.columns.tolist()}")
+        logger.info(f"[DebugBasicStrategy]开始生成RSI信号，RSI长度: {len(df_with_rsi['RSI14']) if 'RSI14' in df_with_rsi.columns else 0}")
         rsi_signal_result = generate_rsi_signal_from_indicators(df_with_rsi, period=14, oversold=30, overbought=70)
-        print(f"RSI信号生成结果状态: {rsi_signal_result['status']}")
         if rsi_signal_result['status'] == 'success':
-            signal_df = pd.DataFrame(rsi_signal_result['data'])
+            rsi_signals_row = rsi_signal_result['data']
+            signal_df = pd.DataFrame(rsi_signals_row)
             print(analyze_basic_signals(signal_df, "RSI信号", ['日期', '收盘价', 'RSI', 'signal']))
-        else:
-            print(f"RSI信号生成失败: {rsi_signal_result.get('message', '未知错误')}")
-            # 额外调试信息
-            print(f"df_with_rsi的形状: {df_with_rsi.shape}")
-            print(f"df_with_rsi的列: {df_with_rsi.columns.tolist()}")
-            if 'RSI' in df_with_rsi.columns:
-                print(f"RSI列的数据类型: {df_with_rsi['RSI'].dtype}")
-                print(f"RSI列的前5个值: {df_with_rsi['RSI'].head().tolist()}")
-                print(f"RSI列中NaN的数量: {df_with_rsi['RSI'].isna().sum()}")
-            else:
-                print("df_with_rsi中没有RSI列！")
+        # 导出Excel文件 - 基础策略流程
+        try:
+            timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
+            excel_file = f"basic_strategy_signals_{timestamp}.xlsx"
+            
+            with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
+                # 导出MA信号
+                if ma_signals_row:
+                    ma_df = pd.DataFrame(ma_signals_row)
+                    ma_df.to_excel(writer, sheet_name='MA_Signals', index=False)
+                    print(f"✓ MA信号已导出到 {excel_file} - MA_Signals sheet")
+                
+                # 导出RSI信号
+                if rsi_signals_row:
+                    rsi_df = pd.DataFrame(rsi_signals_row)
+                    rsi_df.to_excel(writer, sheet_name='RSI_Signals', index=False)
+                    print(f"✓ RSI信号已导出到 {excel_file} - RSI_Signals sheet")
+                
+                # 导出原始数据(携带指标)
+                df_with_rsi.to_excel(writer, sheet_name='Raw_Data', index=False)
+                print(f"✓ 原始数据已导出到 {excel_file} - Raw_Data sheet")
+                
+            print(f"\n📊 基础策略信号已保存到: {excel_file}")
+        except Exception as e:
+                logger.error(f"导出Excel文件失败: {e}")
+                print(f"❌ Excel导出失败: {e}")
         print("\n=== 基础策略流程调试完成 ===")
+        # 统计非零信号 - 修正过滤逻辑
+        def is_nonzero_signal(signal_dict):
+            signal_value = signal_dict.get('signal', 0)
+            # 处理各种可能的零值表示
+            if signal_value is None:
+                return False
+            if isinstance(signal_value, str):
+                try:
+                    signal_value = float(signal_value)
+                except (ValueError, TypeError):
+                    return False
+            return signal_value != 0 and signal_value != 0.0
+        
+        ma_nonzero = [s for s in ma_signals_row if is_nonzero_signal(s)]
+        rsi_nonzero = [s for s in rsi_signals_row if is_nonzero_signal(s)]
+        
+        logger.info(f"[DebugBasicStrategy]MA非零信号数量: {len(ma_nonzero)}")
+        logger.info(f"[DebugBasicStrategy]RSI非零信号数量: {len(rsi_nonzero)}")
+        logger.info(f"[DebugBasicStrategy]总非零信号数量: {len(ma_nonzero) + len(rsi_nonzero)}")
         
     except Exception as e:
         logger.error(f"调试过程中发生错误: {e}")
@@ -430,21 +480,21 @@ def debug_unified_signals():
 
         print("\n4. 生成统一信号...")
         # 4.1 生成统一组合信号
-        unified_result = generate_unified_signals(
-            price_data=df,
-            events_data=events_data,
-            data_signal_config=data_signal_config,
-            event_signal_config=event_signal_config
-        )
-        print(analyze_unified_signals(unified_result))
-        # 4.2 生成仅数据驱动的信号
-        # data_only_result = generate_unified_signals(
+        # unified_result = generate_unified_signals(
         #     price_data=df,
-        #     events_data=None,  # 不提供事件数据
+        #     events_data=events_data,
         #     data_signal_config=data_signal_config,
-        #     event_signal_config=None
+        #     event_signal_config=event_signal_config
         # )
-        # print(analyze_unified_signals(data_only_result))
+        # print(analyze_unified_signals(unified_result))
+        # 4.2 生成仅数据驱动的信号
+        data_only_result = generate_unified_signals(
+            price_data=df,
+            events_data=None,  # 不提供事件数据
+            data_signal_config=data_signal_config,
+            event_signal_config=None
+        )
+        print(analyze_unified_signals(data_only_result))
         # 4.3 生成仅事件驱动的信号
         # event_only_result = generate_unified_signals(
         #     price_data=df,
@@ -458,7 +508,128 @@ def debug_unified_signals():
         # print(analyze_unified_signals(default_result))
         
         # 5. 分析结果
+        # 5. 导出到Excel文件
+        print("\n5. 导出数据到Excel...")
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        excel_file = f"unified_signals_debug_{timestamp}.xlsx"
         
+        try:
+            with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
+                # 5.1 导出股票历史数据
+                print("  - 导出股票历史数据...")
+                df.to_excel(writer, sheet_name='股票历史数据', index=False)
+                
+                # 5.2 导出data_signals（如果存在）
+                if 'data' in data_only_result and 'data_signals' in data_only_result['data']:
+                    data_signals = data_only_result['data']['data_signals']
+                    if data_signals:
+                        print(f"  - 导出数据信号 ({len(data_signals)}条)...")
+                        if isinstance(data_signals, list) and len(data_signals) > 0:
+                            # 检查第一个元素的结构
+                            if isinstance(data_signals[0], dict):
+                                data_signals_df = pd.DataFrame(data_signals)
+                            else:
+                                # 如果不是字典列表，创建简单的DataFrame
+                                data_signals_df = pd.DataFrame({'信号': data_signals})
+                        else:
+                            data_signals_df = pd.DataFrame({'提示': ['无数据信号']})
+                        data_signals_df.to_excel(writer, sheet_name='数据信号', index=False)
+                    else:
+                        # 创建空的数据信号表
+                        empty_df = pd.DataFrame({'提示': ['无数据信号']})
+                        empty_df.to_excel(writer, sheet_name='数据信号', index=False)
+                else:
+                    # 创建空的数据信号表
+                    empty_df = pd.DataFrame({'提示': ['无数据信号']})
+                    empty_df.to_excel(writer, sheet_name='数据信号', index=False)
+                
+                # 5.3 导出event_signals（如果存在）
+                if 'data' in data_only_result and 'event_signals' in data_only_result['data']:
+                    event_signals = data_only_result['data']['event_signals']
+                    if event_signals:
+                        print(f"  - 导出事件信号 ({len(event_signals)}条)...")
+                        if isinstance(event_signals, list) and len(event_signals) > 0:
+                            if isinstance(event_signals[0], dict):
+                                event_signals_df = pd.DataFrame(event_signals)
+                            else:
+                                event_signals_df = pd.DataFrame({'信号': event_signals})
+                        else:
+                            event_signals_df = pd.DataFrame({'提示': ['无事件信号']})
+                        event_signals_df.to_excel(writer, sheet_name='事件信号', index=False)
+                    else:
+                        # 创建空的事件信号表
+                        empty_df = pd.DataFrame({'提示': ['无事件信号']})
+                        empty_df.to_excel(writer, sheet_name='事件信号', index=False)
+                else:
+                    # 创建空的事件信号表
+                    empty_df = pd.DataFrame({'提示': ['无事件信号']})
+                    empty_df.to_excel(writer, sheet_name='事件信号', index=False)
+                
+                # 5.4 导出unified_signals
+                if 'data' in data_only_result and 'unified_signals' in data_only_result['data']:
+                    unified_signals = data_only_result['data']['unified_signals']
+                    if unified_signals:
+                        print(f"  - 导出统一信号 ({len(unified_signals)}条)...")
+                        try:
+                            if isinstance(unified_signals, dict):
+                                # 如果是字典，尝试转换为DataFrame
+                                if all(isinstance(v, (list, tuple)) and len(v) == len(list(unified_signals.values())[0]) for v in unified_signals.values()):
+                                    # 所有值都是相同长度的列表/元组
+                                    unified_df = pd.DataFrame(unified_signals)
+                                else:
+                                    # 值长度不同或包含标量，转换为键值对格式
+                                    unified_df = pd.DataFrame([
+                                        {'键': k, '值': str(v)} for k, v in unified_signals.items()
+                                    ])
+                            elif isinstance(unified_signals, list) and len(unified_signals) > 0:
+                                if isinstance(unified_signals[0], dict):
+                                    unified_df = pd.DataFrame(unified_signals)
+                                else:
+                                    unified_df = pd.DataFrame({'信号': unified_signals})
+                            else:
+                                unified_df = pd.DataFrame({'提示': ['无统一信号']})
+                        except Exception as e:
+                            print(f"    警告：统一信号DataFrame创建失败: {e}")
+                            # 创建调试信息表
+                            unified_df = pd.DataFrame({
+                                '调试信息': [f'统一信号类型: {type(unified_signals)}', 
+                                           f'统一信号内容: {str(unified_signals)[:200]}...']
+                            })
+                        unified_df.to_excel(writer, sheet_name='统一信号', index=False)
+                    else:
+                        # 创建空的统一信号表
+                        empty_df = pd.DataFrame({'提示': ['无统一信号']})
+                        empty_df.to_excel(writer, sheet_name='统一信号', index=False)
+                else:
+                    # 创建空的统一信号表
+                    empty_df = pd.DataFrame({'提示': ['无统一信号']})
+                    empty_df.to_excel(writer, sheet_name='统一信号', index=False)
+                
+                # 5.5 导出汇总信息
+                summary_data = {
+                    '项目': ['股票代码', '数据时间范围', '股票数据行数', '模拟事件数量', 
+                            '数据信号数量', '事件信号数量', '统一信号数量', '导出时间'],
+                    '值': [
+                        '000001.SH',
+                        f"{df['日期'].min()} ~ {df['日期'].max()}",
+                        len(df),
+                        len(events_data),
+                        data_only_result.get('data', {}).get('data_signals_count', 0),
+                        data_only_result.get('data', {}).get('event_signals_count', 0),
+                        data_only_result.get('data', {}).get('total_signals', 0),
+                        timestamp
+                    ]
+                }
+                summary_df = pd.DataFrame(summary_data)
+                summary_df.to_excel(writer, sheet_name='汇总信息', index=False)
+                
+            print(f"✓ Excel文件已保存: {excel_file}")
+            print(f"  包含工作表: 股票历史数据, 数据信号, 事件信号, 统一信号, 汇总信息")
+            
+        except Exception as e:
+            print(f"❌ Excel导出失败: {e}")
+            import traceback
+            traceback.print_exc()
         print("\n=== 统一信号生成器调试完成 ===")
         
     except Exception as e:

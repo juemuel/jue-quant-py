@@ -49,11 +49,19 @@ class DataSignalGenerator:
         logger.info(f"[SignalService]信号规则: {[rule.__name__ for rule in self.signal_rules]}")
         logger.info(f"[SignalService]过滤规则: {[rule.__name__ for rule in self.filter_rules]}")
         logger.info(f"[SignalService]可用指标: {list(indicators.keys())}")
+        
+        # 添加详细的指标统计信息
         for name, series in indicators.items():
             valid_count = series.notna().sum()
-            # logger.info(f"[SignalService]指标 {name}: 长度={len(series)}, 有效值数量={valid_count}, 类型={series.dtype}")
-            # if len(series) > 0:
-            #     logger.info(f"[SignalService]指标 {name} 样本值: 索引20={series.iloc[20] if len(series) > 20 else 'N/A'}, 索引50={series.iloc[50] if len(series) > 50 else 'N/A'}")
+            logger.info(f"[SignalService]指标 {name}: 长度={len(series)}, 有效值数量={valid_count}, 类型={series.dtype}")
+            if len(series) > 0:
+                logger.info(f"[SignalService]指标 {name} 样本值: 索引20={series.iloc[20] if len(series) > 20 else 'N/A'}, 索引50={series.iloc[50] if len(series) > 50 else 'N/A'}")
+        
+        # 添加每个规则的信号计数器
+        rule_signal_counts = {}
+        for rule in self.signal_rules:
+            rule_name = getattr(rule, 'chinese_name', rule.__name__ if hasattr(rule, '__name__') else str(rule))
+            rule_signal_counts[rule_name] = 0
         
         for i in range(1, len(df)):  # 从第二行开始，确保有前一期数据
             row = df.iloc[i]
@@ -91,36 +99,50 @@ class DataSignalGenerator:
                 indicators=extracted_indicators,
                 market_context=market_context
             )
+            
+            # 添加详细的上下文调试信息（每100行输出一次）
+            if i % 100 == 0:
+                logger.info(f"[SignalService]第{i}行上下文: 价格={price}, 成交量={volume}, 指标数量={len(extracted_indicators)}")
+                logger.info(f"[SignalService]第{i}行指标值: {extracted_indicators}")
+            
             # 应用所有信号规则
             for rule_idx, rule in enumerate(self.signal_rules):
                 try:
-                     # 在循环开始就定义 rule_name，确保在所有分支中都可用
+                    # 在循环开始就定义 rule_name，确保在所有分支中都可用
                     rule_name = getattr(rule, 'chinese_name', rule.__name__ if hasattr(rule, '__name__') else f"规则{rule_idx}")
                     signal = rule(context)
                     if signal:
+                        # 记录原始信号生成
+                        logger.debug(f"[SignalService]第{i}行规则{rule_name}生成原始信号: 类型={signal.get('signal')}, 强度={signal.get('strength'):.3f}")
+                        
                         # 应用过滤规则
                         if self._apply_filters(signal, context):
                             # 应用权重规则
                             signal = self._apply_weights(signal, context)
                             signals.append(signal)
-                            if i % 100 == 0:
-                                logger.debug(f"[SignalService]规则{rule_name}在第{i}行生成信号: 类型={signal.get('signal')}, 强度={signal.get('strength'):.3f}, 原因={signal.get('reason')}, 使用指标={signal.get('indicators_used')}")
+                            rule_signal_counts[rule_name] += 1
+                            logger.debug(f"[SignalService]第{i}行规则{rule_name}信号通过过滤: 类型={signal.get('signal')}, 强度={signal.get('strength'):.3f}, 原因={signal.get('reason')}")
                         else:
-                            if i % 100 == 0:
-                                logger.debug(f"[SignalService]信号被过滤规则拒绝")
+                            logger.debug(f"[SignalService]第{i}行规则{rule_name}信号被过滤规则拒绝")
                     else:
-                        if i % 100 == 0:  # 每50行记录一次，避免日志过多
-                            logger.debug(f"[SignalService]规则{rule_name}在第{i}行未触发(每100的抽样)")
+                        if i % 200 == 0:  # 减少未触发信号的日志频率
+                            logger.debug(f"[SignalService]第{i}行规则{rule_name}未触发(每200行抽样)")
                 except Exception as e:
-                    logger.error(f"[SignalService]规则{rule_idx}在第{i}行执行失败: {e}")
+                    logger.error(f"[SignalService]第{i}行规则{rule_idx}({rule_name})执行失败: {e}")
                     import traceback
                     logger.error(f"[SignalService]错误详情: {traceback.format_exc()}")
+        
         # 统计生成的信号类型分布
         signal_type_stats = {}
         for signal in signals:
             signal_type = signal.get('signal', 'unknown')
             signal_type_stats[signal_type] = signal_type_stats.get(signal_type, 0) + 1
-        logger.info(f"[DataSignalService]信号类型分布: {signal_type_stats}")    
+        
+        # 输出详细的统计信息
+        logger.info(f"[DataSignalService]各规则生成信号数量: {rule_signal_counts}")
+        logger.info(f"[DataSignalService]信号类型分布: {signal_type_stats}")
+        logger.info(f"[DataSignalService]总信号数量: {len(signals)}")
+        
         return signals
     
     def _extract_indicators(self, indicators: Dict, index: int, prev_row) -> Dict[str, float]:
@@ -135,11 +157,19 @@ class DataSignalGenerator:
                         converted_value = float(pd.to_numeric(value, errors='coerce'))
                         result[name] = converted_value
                     except (ValueError, TypeError) as e:
-                        result[name] = 0.0
+                        # 对于RSI等技术指标，保持NaN而不是设为0
+                        if name.startswith('RSI') or name.startswith('MACD') or name.startswith('MA'):
+                            result[name] = np.nan
+                        else:
+                            result[name] = 0.0
                 else:
-                    result[name] = 0.0
+                    # 对于RSI等技术指标，保持NaN而不是设为0
+                    if name.startswith('RSI') or name.startswith('MACD') or name.startswith('MA'):
+                        result[name] = np.nan
+                    else:
+                        result[name] = 0.0
                 
-                # 处理前一期值 - 这部分必须在for循环内部！
+                # 处理前一期值
                 if index > 0:
                     prev_value = series.iloc[index-1]
                     if pd.notna(prev_value):
@@ -147,9 +177,15 @@ class DataSignalGenerator:
                             converted_prev_value = float(pd.to_numeric(prev_value, errors='coerce'))
                             result[f'{name}_prev'] = converted_prev_value
                         except (ValueError, TypeError) as e:
-                            result[f'{name}_prev'] = 0.0
+                            if name.startswith('RSI') or name.startswith('MACD') or name.startswith('MA'):
+                                result[f'{name}_prev'] = np.nan
+                            else:
+                                result[f'{name}_prev'] = 0.0
                     else:
-                        result[f'{name}_prev'] = 0.0
+                        if name.startswith('RSI') or name.startswith('MACD') or name.startswith('MA'):
+                            result[f'{name}_prev'] = np.nan
+                        else:
+                            result[f'{name}_prev'] = 0.0
         # 添加调试信息
         if index % 50 == 0:
             logger.info(f"[SignalService]第{index}行提取的指标: {result}")
