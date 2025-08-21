@@ -14,7 +14,7 @@ from .signal_rules.data_signal_rules import (
 )
 
 # 导入事件驱动相关
-from .event_service import MarketEvent, EventType, EventSeverity
+from app.services.events.event_service import MarketEvent, EventType, EventSeverity
 from .signal_rules.event_signal_rules import (
     news_sentiment_rule,
     earnings_anticipation_rule,

@@ -1,4 +1,4 @@
-from app.services.event_service import MarketEvent, EventType, EventSeverity
+from app.services.events.event_service import MarketEvent, EventType, EventSeverity
 from typing import Dict, Optional, Callable
 from datetime import datetime
 from functools import partial

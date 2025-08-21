@@ -184,7 +184,7 @@ class EventDrivenStrategyManager:
     def __init__(self):
         self.listeners = []
         self.processor = EventProcessor()
-        from .signal_service import EventSignalGenerator
+        from app.services.signals.signal_service import EventSignalGenerator
         self.signal_generator = EventSignalGenerator()
         self.is_running = False
     

@@ -202,6 +202,58 @@ class IndicatorCalculator:
             return {"status": "error", "message": f"计算失败: {e}"}
     
     @validate_dataframe
+    def calculate_multiple_rsi(self, df: pd.DataFrame, periods: List[int]) -> Dict:
+        """
+        计算多个周期的RSI指标
+        :param df: 价格数据
+        :param periods: RSI周期列表
+        :return: 计算结果
+        """
+        logger.debug(f"[IndicatorCalculator]计算多个RSI指标，周期: {periods}")
+        
+        try:
+            result_df = df.copy()
+            
+            # 确定收盘价列名
+            close_col = 'close' if 'close' in df.columns else '收盘'
+            if close_col not in df.columns:
+                return {"status": "error", "message": "未找到收盘价数据"}
+            
+            rsi_columns = []
+            
+            for period in periods:
+                # 计算价格变化
+                delta = df[close_col].diff()
+                gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+                loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+                
+                # 添加除0保护
+                rs = gain / loss.replace(0, np.nan)
+                rsi_column = f'RSI{period}'
+                result_df[rsi_column] = 100 - (100 / (1 + rs))
+                
+                # 处理边界情况
+                mask_loss_zero = (loss == 0)
+                mask_gain_positive = (gain > 0) & mask_loss_zero
+                mask_gain_zero = (gain == 0) & mask_loss_zero
+                
+                result_df.loc[mask_gain_positive, rsi_column] = 100.0
+                result_df.loc[mask_gain_zero, rsi_column] = 50.0
+                
+                result_df[rsi_column] = pd.to_numeric(result_df[rsi_column], errors='coerce')
+                rsi_columns.append(rsi_column)
+            
+            # 数据清理
+            from common.utils import clean_numeric_data
+            result_df = clean_numeric_data(result_df)
+            
+            return self._format_result(result_df, f"多周期RSI指标计算完成，周期: {periods}", rsi_columns)
+            
+        except Exception as e:
+            logger.error(f"[IndicatorCalculator]计算多周期RSI失败: {e}")
+            return {"status": "error", "message": f"计算失败: {e}"}
+   
+    @validate_dataframe
     def calculate_macd(self, df: pd.DataFrame, fast: int = 12, 
                       slow: int = 26, signal: int = 9) -> Dict:
         """
@@ -520,16 +572,48 @@ def calculate_indicators_for_strategy(df: pd.DataFrame,
     # RSI指标
     if config.get('rsi', {}).get('enable', True):
         rsi_config = config.get('rsi', {})
-        period = rsi_config.get('period', 14)
-        rsi_result = calculator.calculate_rsi(df, period)
         
-        if rsi_result['status'] == 'success':
-            rsi_df = pd.DataFrame(rsi_result['data'])
-            rsi_column = f'RSI{period}'
-            if rsi_column in rsi_df.columns:
-                # 直接使用已经清理过的数据，不再进行pd.to_numeric转换
-                indicators[rsi_column] = rsi_df[rsi_column]
-                # 为了向后兼容，也保留原来的键名
-                indicators['RSI'] = indicators[rsi_column]
+        # 根据是否开启自适应来决定计算哪些RSI周期
+        if rsi_config.get('adaptive', False):
+            # 自适应模式：计算多个周期的RSI以支持动态选择
+            base_period = rsi_config.get('period', 14)
+            periods = [
+                max(base_period - 7, 7),   # 最短周期
+                max(base_period - 4, 10),  # 短周期
+                base_period,               # 基础周期
+                min(base_period + 7, 28),  # 长周期
+                min(base_period + 14, 35)  # 最长周期
+            ]
+            # 去重并排序
+            periods = sorted(list(set(periods)))
+            logger.debug(f"[Indicator]使用RSI自适应模式，计算周期: {periods}")
+            
+            rsi_result = calculator.calculate_multiple_rsi(df, periods)
+            
+            if rsi_result['status'] == 'success':
+                rsi_df = pd.DataFrame(rsi_result['data'])
+                for period in periods:
+                    rsi_column = f'RSI{period}'
+                    if rsi_column in rsi_df.columns:
+                        indicators[rsi_column] = rsi_df[rsi_column]
+                
+                # 为了向后兼容，也保留原来的键名（使用基础周期）
+                base_rsi_column = f'RSI{base_period}'
+                if base_rsi_column in indicators:
+                    indicators['RSI'] = indicators[base_rsi_column]
+        else:
+            # 固定模式：只计算配置的周期
+            period = rsi_config.get('period', 14)
+            logger.debug(f"[Indicator]使用固定RSI周期: {period}")
+            
+            rsi_result = calculator.calculate_rsi(df, period)
+            
+            if rsi_result['status'] == 'success':
+                rsi_df = pd.DataFrame(rsi_result['data'])
+                rsi_column = f'RSI{period}'
+                if rsi_column in rsi_df.columns:
+                    indicators[rsi_column] = rsi_df[rsi_column]
+                    # 为了向后兼容，也保留原来的键名
+                    indicators['RSI'] = indicators[rsi_column]
     
     return indicators, df

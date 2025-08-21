@@ -5,14 +5,8 @@ import pandas as pd
 import numpy as np
 from typing import List, Dict, Optional  # 添加 Optional 导入
 import datetime
-from . import analytic_service
-from .risk_manage_service import (
-    calculate_position_size, ManagerFactory, RiskManager, PositionManager,
-    calculate_volatility, calculate_max_drawdown, 
-    calculate_sharpe_ratio, calculate_var, calculate_win_rate)
-from .signal_service import DataSignalGenerator, EventSignalGenerator, UnifiedSignalManager
-from .event_service import MarketEvent, EventType, EventSeverity 
-from .signal_rules.data_signal_rules import (
+from app.services.analytics import analytic_service
+from app.services.signals.signal_rules.data_signal_rules import (
     adaptive_ma_crossover_rule,
     create_parameterized_ma_rule, 
     adaptive_rsi_rule,
@@ -20,7 +14,7 @@ from .signal_rules.data_signal_rules import (
     trend_strength_filter_rule,
     support_resistance_breakout_rule
 )
-from .signal_rules.event_signal_rules import (
+from app.services.signals.signal_rules.event_signal_rules import (
     news_sentiment_rule,
     earnings_anticipation_rule,
     keyword_trigger_rule,
@@ -28,7 +22,13 @@ from .signal_rules.event_signal_rules import (
     create_parameterized_earnings_rule,
     create_parameterized_keyword_rule
 )
-from .indicator_service import IndicatorCalculator, calculate_indicators_for_strategy
+from app.services.risk.risk_manage_service import (
+    calculate_position_size, ManagerFactory, RiskManager, PositionManager,
+    calculate_volatility, calculate_max_drawdown, 
+    calculate_sharpe_ratio, calculate_var, calculate_win_rate)
+from app.services.signals.signal_service import DataSignalGenerator, EventSignalGenerator, UnifiedSignalManager
+from app.services.events.event_service import MarketEvent, EventType, EventSeverity 
+from app.services.analytics.indicator_service import IndicatorCalculator, calculate_indicators_for_strategy
 from datetime import datetime as dt
 import datetime  # 修改这行：导入完整的datetime模块
 import pandas as pd
@@ -322,7 +322,7 @@ def generate_news_sentiment_signal(events_data: List[Dict], sentiment_threshold=
     logger.info(f"[Strategy]生成新闻情感信号，情感阈值: {sentiment_threshold}")
     
     try:
-        from .event_service import MarketEvent, EventType, EventSeverity
+        from app.services.events.event_service import MarketEvent, EventType, EventSeverity
         
         signal_generator = EventSignalGenerator()
         signal_generator.add_rule(news_sentiment_rule)
@@ -377,7 +377,7 @@ def generate_earnings_signal(events_data: List[Dict], anticipation_days=3):
     logger.info(f"[Strategy]生成财报事件信号，预期天数: {anticipation_days}")
     
     try:
-        from .event_service import MarketEvent, EventType
+        from app.services.events.event_service import MarketEvent, EventType
         
         signal_generator = EventSignalGenerator()
         signal_generator.add_rule(earnings_anticipation_rule)
@@ -430,7 +430,7 @@ def generate_keyword_trigger_signal(events_data: List[Dict], keywords=None, trig
     logger.info(f"[Strategy]生成关键词触发信号，触发强度: {trigger_strength}")
     
     try:
-        from .event_service import MarketEvent
+        from app.services.events.event_service import MarketEvent
         
         signal_generator = EventSignalGenerator()
         signal_generator.add_rule(keyword_trigger_rule)
@@ -480,7 +480,7 @@ def generate_market_anomaly_signal(events_data: List[Dict], anomaly_threshold=2.
     logger.info(f"[Strategy]生成市场异动信号，异动阈值: {anomaly_threshold}")
     
     try:
-        from .event_service import MarketEvent, EventType
+        from app.services.events.event_service import MarketEvent, EventType
         
         signal_generator = EventSignalGenerator()
         
@@ -640,7 +640,7 @@ def generate_event_driven_signals(events_data: List[Dict], signal_rules=None):
     logger.info(f"[Strategy]开始生成事件驱动信号，事件数量: {len(events_data)}")
     
     try:
-        from .event_service import MarketEvent
+        from app.services.events.event_service import MarketEvent
         
         # 初始化信号生成器
         signal_generator = EventSignalGenerator()
@@ -735,6 +735,7 @@ def generate_unified_signals(price_data: pd.DataFrame,
                         period=rsi_config.get('period', 14),
                         oversold=rsi_config.get('oversold', 30),
                         overbought=rsi_config.get('overbought', 70),
+                        adaptive=rsi_config.get('adaptive', False),  # 新增自适应参数
                         filter_config=rsi_config.get('filter_config')  # 传入独立的过滤配置
                     )
                     data_generator.add_signal_rule(rsi_rule)
@@ -1688,7 +1689,7 @@ def event_driven_backtest(
     logger.info(f"[Strategy]开始事件驱动回测，初始资金: {initial_capital}")
     
     try:
-        from .signal_service import MarketEvent
+        from app.services.signals.signal_service import MarketEvent
         
         # 初始化信号生成器
         signal_generator = EventSignalGenerator()

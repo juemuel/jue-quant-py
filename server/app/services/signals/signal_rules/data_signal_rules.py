@@ -16,9 +16,40 @@ class TechnicalSignalContext:
     market_context: Dict[str, float]  # 市场环境
 # ============ 信号生成规则 ============
 # 动态均线交叉规则（已完成）
+# 固定参数
 def adaptive_ma_crossover_rule(context: TechnicalSignalContext) -> Optional[Dict]:
     """自适应均线交叉规则（固定参数版本）"""
     return adaptive_ma_crossover_rule_with_params(context, volatility_threshold=0.3, adaptive=False)
+# 动态参数：创建规则（携带基础参数和过滤配置）->传入
+def create_parameterized_ma_rule(short_period: int = 5, 
+                                long_period: int = 20, 
+                                volatility_threshold: float = 0.3, 
+                                adaptive: bool = False,
+                                filter_config: Optional[Dict] = None) -> Callable:
+    """
+    创建参数化的MA规则，支持独立的过滤规则配置
+    """
+    def ma_rule_with_filters(context: TechnicalSignalContext) -> Optional[Dict]:
+        return adaptive_ma_crossover_rule_with_params(
+            context, 
+            short_period=short_period, 
+            long_period=long_period,
+            volatility_threshold=volatility_threshold,
+            adaptive=adaptive,
+            filter_config=filter_config
+        )
+    
+    # 设置规则名称和描述
+    filter_desc = ""
+    if filter_config:
+        enabled_filters = [k for k, v in filter_config.items() if v.get('enable', False)]
+        filter_desc = f",过滤器:{','.join(enabled_filters)}"
+    
+    adaptive_desc = "自适应" if adaptive else "固定"
+    ma_rule_with_filters.chinese_name = f'MA交叉规则({adaptive_desc},短:{short_period},长:{long_period}{filter_desc})'
+    ma_rule_with_filters.__name__ = f'ma_rule_{short_period}_{long_period}_{adaptive}'
+    
+    return ma_rule_with_filters
 def adaptive_ma_crossover_rule_with_params(context: TechnicalSignalContext,
                                          short_period: int = 5,
                                          long_period: int = 20,
@@ -28,6 +59,12 @@ def adaptive_ma_crossover_rule_with_params(context: TechnicalSignalContext,
     """
     参数化的自适应均线交叉规则，支持独立的过滤规则配置
     """
+    # 保存原始配置参数
+    original_short_period = short_period
+    original_long_period = long_period
+    original_volatility_threshold = volatility_threshold
+
+    # 获取当前函数的规则名称
     indicators = context.indicators
     
     # 默认过滤规则配置
@@ -39,7 +76,12 @@ def adaptive_ma_crossover_rule_with_params(context: TechnicalSignalContext,
             'price_momentum_filter': {'enable': False,'momentum_threshold': 0.01,'lookback_periods': 3},
             'signal_strength_filter': {'enable': False,'min_strength': 0.6}
         }
-    
+    generation_details = []
+    # 根据adaptive参数动态生成规则名称
+    if adaptive:
+        rule_name = '自适应均线交叉规则(参数化-自适应模式)'
+    else:
+        rule_name = '均线交叉规则(参数化-固定模式)'
     if adaptive:
         # 自适应逻辑
         available_mas = [key for key in indicators.keys() if key.startswith('MA')]
@@ -47,18 +89,28 @@ def adaptive_ma_crossover_rule_with_params(context: TechnicalSignalContext,
             return None
         
         volatility = context.market_context.get('volatility', 0.2)
+        generation_details.append(f"启用自适应模式，当前市场波动率: {volatility:.3f}")
+
         if volatility > volatility_threshold and 'MA3' in available_mas and 'MA10' in available_mas:
             short_ma_key, long_ma_key = 'MA3', 'MA10'
+            actual_short_period, actual_long_period = 3, 10
+            generation_details.append(f"高波动市场(>{volatility_threshold})：选择敏感组合MA3/MA10")
         elif f'MA{short_period}' in available_mas and f'MA{long_period}' in available_mas:
             short_ma_key, long_ma_key = f'MA{short_period}', f'MA{long_period}'
+            actual_short_period, actual_long_period = short_period, long_period
+            generation_details.append(f"使用配置的基础周期组合MA{short_period}/MA{long_period}")
         else:
             # 使用可用的最短和最长周期
             periods = [int(ma[2:]) for ma in available_mas]
             periods.sort()
             short_ma_key, long_ma_key = f'MA{periods[0]}', f'MA{periods[-1]}'
+            actual_short_period, actual_long_period = periods[0], periods[-1]
+            generation_details.append(f"配置周期不可用，使用可用的最短/最长周期MA{actual_short_period}/MA{actual_long_period}")
     else:
         # 固定周期
         short_ma_key, long_ma_key = f'MA{short_period}', f'MA{long_period}'
+        actual_short_period, actual_long_period = short_period, long_period
+        generation_details.append(f"固定参数模式：使用MA{short_period}/MA{long_period}")
     
     if short_ma_key not in indicators or long_ma_key not in indicators:
         return None
@@ -67,7 +119,8 @@ def adaptive_ma_crossover_rule_with_params(context: TechnicalSignalContext,
     long_ma = indicators[long_ma_key]
     short_ma_prev = indicators.get(f'{short_ma_key}_prev', short_ma)
     long_ma_prev = indicators.get(f'{long_ma_key}_prev', long_ma)
-    
+    # generation_details.append(f"当前均线值: {short_ma_key}={short_ma:.2f}, {long_ma_key}={long_ma:.2f}")
+    # generation_details.append(f"前期均线值: {short_ma_key}={short_ma_prev:.2f}, {long_ma_key}={long_ma_prev:.2f}")
     # 确保所有均线值都不是None或NaN
     if (short_ma is None or pd.isna(short_ma) or 
         long_ma is None or pd.isna(long_ma) or 
@@ -79,27 +132,57 @@ def adaptive_ma_crossover_rule_with_params(context: TechnicalSignalContext,
     signal = None
     # 金叉买入
     if short_ma > long_ma and short_ma_prev <= long_ma_prev:
+        generation_details.append(f"触发金叉条件: 当前{short_ma:.2f}>{long_ma:.2f} 且 前期{short_ma_prev:.2f}<={long_ma_prev:.2f}")
         strength = min((short_ma - long_ma) / long_ma, 1.0)
         signal = {
             'symbol': context.symbol,
+            'rule_name': rule_name,
             'signal': 1,
             'strength': strength,
-            'reason': f'均线金叉{short_ma_key}>{long_ma_key}({short_ma:.2f}>{long_ma:.2f}),参数({short_period}/{long_period})',
+            'generation_details': '; '.join(generation_details),
+            'reason': f'均线金叉{short_ma_key}>{long_ma_key}({short_ma:.2f}>{long_ma:.2f}),参数({actual_short_period}/{actual_long_period})',
             'timestamp': context.timestamp,
-            'indicators_used': [short_ma_key, long_ma_key]
+            'indicators_used': [short_ma_key, long_ma_key],
+            'fixed_params': {
+                'short_period': original_short_period,
+                'long_period': original_long_period,
+            },
+            'adaptive_params': {
+                'short_period': actual_short_period,
+                'long_period': actual_long_period,
+                'volatility_threshold': volatility_threshold,
+                'volatility': context.market_context.get('volatility', 0.2)
+            } if adaptive else None
         }
     
     # 死叉卖出
     elif short_ma < long_ma and short_ma_prev >= long_ma_prev:
+        generation_details.append(f"触发死叉条件: 当前{short_ma:.2f}<{long_ma:.2f} 且 前期{short_ma_prev:.2f}>={long_ma_prev:.2f}")
         strength = min((long_ma - short_ma) / long_ma, 1.0)
         signal = {
             'symbol': context.symbol,
+            'rule_name': rule_name,
             'signal': -1,
             'strength': strength,
-            'reason': f'均线死叉{short_ma_key}<{long_ma_key}({short_ma:.2f}<{long_ma:.2f}),参数({short_period}/{long_period})',
+            'generation_details': '; '.join(generation_details),
+            'reason': f'均线死叉{short_ma_key}<{long_ma_key}({short_ma:.2f}<{long_ma:.2f}),参数({actual_short_period}/{actual_long_period})',
             'timestamp': context.timestamp,
-            'indicators_used': [short_ma_key, long_ma_key]
+            'indicators_used': [short_ma_key, long_ma_key],
+            'fixed_params': {
+                'short_period': original_short_period,
+                'long_period': original_long_period,
+            },
+            'adaptive_params': {
+                'short_period': actual_short_period,
+                'long_period': actual_long_period,
+                'volatility_threshold': volatility_threshold,
+                'volatility': context.market_context.get('volatility', 0.2)
+            } if adaptive else None
         }
+    else:
+        generation_details.append(f"未触发交叉条件: 无金叉或死叉发生")
+        return None
+
     if signal is None:
         return None
     
@@ -109,14 +192,47 @@ def adaptive_ma_crossover_rule_with_params(context: TechnicalSignalContext,
     
     return signal
 
-# 动态RSI规则（已完成）
+# RSI规则（已完成）
+# 固定参数
 def adaptive_rsi_rule(context: TechnicalSignalContext) -> Optional[Dict]:
     """自适应RSI规则（固定参数版本）"""
     return adaptive_rsi_rule_with_params(context, oversold=30, overbought=70)
+# 动态参数：创建规则（携带基础参数和过滤配置）->传入
+def create_parameterized_rsi_rule(period: int = 14, 
+                                 oversold: int = 30, 
+                                 overbought: int = 70,
+                                 adaptive: bool = False,  # 新增自适应参数 
+                                 filter_config: Optional[Dict] = None) -> Callable:
+    """
+    创建参数化的RSI规则，支持独立的过滤规则配置
+    """
+    def rsi_rule_with_filters(context: TechnicalSignalContext) -> Optional[Dict]:
+        return adaptive_rsi_rule_with_params(
+            context, 
+            base_period=period, 
+            oversold=oversold, 
+            overbought=overbought,
+            adaptive=adaptive,  # 传递自适应参数
+            filter_config=filter_config
+        )
+    
+    # 设置规则名称和描述
+    filter_desc = ""
+    if filter_config:
+        enabled_filters = [k for k, v in filter_config.items() if v.get('enable', False)]
+        filter_desc = f",过滤器:{','.join(enabled_filters)}"
+    
+    adaptive_desc = "自适应" if adaptive else "固定"
+    rsi_rule_with_filters.chinese_name = f'RSI规则({adaptive_desc},周期:{period},超卖:{oversold},超买:{overbought}{filter_desc})'
+    rsi_rule_with_filters.__name__ = f'rsi_rule_{period}_{oversold}_{overbought}_{adaptive}'
+    
+    return rsi_rule_with_filters
+    
 def adaptive_rsi_rule_with_params(context: TechnicalSignalContext,
                                 base_period: int = 14,
                                 oversold: float = 30,
                                 overbought: float = 70,
+                                adaptive: bool = False,  # 新增自适应参数
                                 filter_config: Optional[Dict] = None) -> Optional[Dict]:
     """
     参数化的自适应RSI规则，支持独立的过滤规则配置
@@ -124,10 +240,16 @@ def adaptive_rsi_rule_with_params(context: TechnicalSignalContext,
     :param base_period: RSI基础周期
     :param oversold: 超卖阈值
     :param overbought: 超买阈值
+    :param adaptive: 是否启用自适应周期
     :param filter_config: 过滤规则配置
     """
+    # 保存原始配置参数
+    original_base_period = base_period
+    original_oversold = oversold
+    original_overbought = overbought
+
     indicators = context.indicators
-    
+    generation_details = []
     # 默认过滤规则配置
     if filter_config is None:
         filter_config = {
@@ -146,12 +268,46 @@ def adaptive_rsi_rule_with_params(context: TechnicalSignalContext,
                 'min_strength': 0.6
             }
         }
+    # 动态生成精确的规则名称
+    if adaptive:
+        rule_name = '自适应RSI规则(参数化-自适应模式)'
+    else:
+        rule_name = f'固定参数RSI规则(参数化-固定模式)'
+    # 自适应周期逻辑
+    if adaptive:
+        # 根据市场波动率调整RSI周期
+        volatility = context.market_context.get('volatility', 0.2)
+        generation_details.append(f"启用自适应模式，当前市场波动率: {volatility:.3f}")
+        
+        if volatility > 0.4:  # 高波动市场
+            period = max(base_period - 4, 7)  # 缩短周期，更敏感
+            # 调整阈值，高波动时更严格
+            oversold = max(oversold - 5, 20)
+            overbought = min(overbought + 5, 85)
+            generation_details.append(f"高波动市场(>{0.4})：周期缩短至{period}，阈值调整为超卖{oversold}/超买{overbought}")
+        elif volatility < 0.15:  # 低波动市场
+            period = min(base_period + 7, 28)  # 延长周期，减少噪音
+            # 调整阈值，低波动时更宽松
+            oversold = min(oversold + 5, 40)
+            overbought = max(overbought - 5, 60)
+            generation_details.append(f"低波动市场(<{0.15})：周期延长至{period}，阈值调整为超卖{oversold}/超买{overbought}")
+        else:  # 中等波动
+            period = base_period
+            generation_details.append(f"中等波动市场：使用基础周期{period}，阈值保持超卖{oversold}/超买{overbought}")
+    else:
+        period = base_period
+        generation_details = [f"固定参数模式：周期{period}，超卖{oversold}/超买{overbought}"]
     
     # 获取RSI值
-    rsi_column = f'RSI{base_period}'
+    rsi_column = f'RSI{period}'
     if rsi_column not in indicators:
-        return None
-    
+        # 如果没有对应周期的RSI，尝试使用基础周期
+        rsi_column = f'RSI{base_period}'
+        if rsi_column not in indicators:
+            return None
+        generation_details.append(f"警告：未找到RSI{period}，使用{rsi_column}")
+    else:
+        generation_details.append(f"使用指标：{rsi_column}")
     rsi = indicators[rsi_column]
     if rsi is None or pd.isna(rsi):
         return None
@@ -160,23 +316,53 @@ def adaptive_rsi_rule_with_params(context: TechnicalSignalContext,
     
     # 生成基础信号
     if rsi <= oversold:
+        generation_details.append(f"触发超卖条件: {rsi:.1f} <= {oversold}")
         signal = {
             'symbol': context.symbol,
+            'rule_name': rule_name,
             'signal': 1,
             'strength': min((oversold - rsi) / oversold, 1.0),
-            'reason': f'RSI{base_period}超卖信号 (RSI:{rsi:.1f}<={oversold})',
+            'generation_details': '; '.join(generation_details),
+            'reason': f'RSI{period}超卖信号 (RSI:{rsi:.1f}<={oversold})',  # 使用实际的period而不是base_period
             'timestamp': context.timestamp,
-            'indicators_used': [rsi_column]
+            'indicators_used': [f'RSI{period}'],  # 使用实际的period而不是base_period
+            'fixed_params': {
+                'period': original_base_period,  # 实际使用的周期
+                'oversold': original_oversold,
+                'overbought': original_overbought,
+            },
+            'adaptive_params': {
+                'period': period,  # 使用实际的period而不是base_period
+                'oversold': oversold,
+                'overbought': overbought,
+                'volatility': context.market_context.get('volatility', 0.2)
+            } if adaptive else None
         }
     elif rsi >= overbought:
+        generation_details.append(f"触发超买条件: {rsi:.1f} >= {overbought}")
         signal = {
             'symbol': context.symbol,
+            'rule_name': rule_name,
             'signal': -1,
             'strength': min((rsi - overbought) / (100 - overbought), 1.0),
-            'reason': f'RSI{base_period}超买信号 (RSI:{rsi:.1f}>={overbought})',
+            'generation_details': '; '.join(generation_details),
+            'reason': f'RSI{period}超买信号 (RSI:{rsi:.1f}>={overbought})',  # 使用实际的period而不是base_period
             'timestamp': context.timestamp,
-            'indicators_used': [rsi_column]
+            'indicators_used': [f'RSI{period}'],  # 使用实际的period而不是base_period
+            'fixed_params': {
+                'period': original_base_period,  # 实际使用的周期
+                'oversold': original_oversold,
+                'overbought': original_overbought,
+            },
+            'adaptive_params': {
+                'period': period,  # 使用实际的period而不是base_period
+                'oversold': oversold,
+                'overbought': overbought,
+                'volatility': context.market_context.get('volatility', 0.2)
+            } if adaptive else None
         }
+    else:
+        generation_details.append(f"未触发信号条件: {oversold} < {rsi:.1f} < {overbought}")
     
     # 如果没有生成信号，直接返回
     if signal is None:
@@ -276,61 +462,6 @@ def support_resistance_breakout_rule(context: TechnicalSignalContext) -> Optiona
     return None
 
 # 创建规则
-def create_parameterized_ma_rule(short_period: int = 5, 
-                                long_period: int = 20, 
-                                volatility_threshold: float = 0.3, 
-                                adaptive: bool = False,
-                                filter_config: Optional[Dict] = None) -> Callable:
-    """
-    创建参数化的MA规则，支持独立的过滤规则配置
-    """
-    def ma_rule_with_filters(context: TechnicalSignalContext) -> Optional[Dict]:
-        return adaptive_ma_crossover_rule_with_params(
-            context, 
-            short_period=short_period, 
-            long_period=long_period,
-            volatility_threshold=volatility_threshold,
-            adaptive=adaptive,
-            filter_config=filter_config
-        )
-    
-    # 设置规则名称和描述
-    filter_desc = ""
-    if filter_config:
-        enabled_filters = [k for k, v in filter_config.items() if v.get('enable', False)]
-        filter_desc = f",过滤器:{','.join(enabled_filters)}"
-    
-    adaptive_desc = "自适应" if adaptive else "固定"
-    ma_rule_with_filters.chinese_name = f'MA交叉规则({adaptive_desc},短:{short_period},长:{long_period}{filter_desc})'
-    ma_rule_with_filters.__name__ = f'ma_rule_{short_period}_{long_period}_{adaptive}'
-    
-    return ma_rule_with_filters
-def create_parameterized_rsi_rule(period: int = 14, 
-                                 oversold: int = 30, 
-                                 overbought: int = 70, 
-                                 filter_config: Optional[Dict] = None) -> Callable:
-    """
-    创建参数化的RSI规则，支持独立的过滤规则配置
-    """
-    def rsi_rule_with_filters(context: TechnicalSignalContext) -> Optional[Dict]:
-        return adaptive_rsi_rule_with_params(
-            context, 
-            base_period=period, 
-            oversold=oversold, 
-            overbought=overbought,
-            filter_config=filter_config
-        )
-    
-    # 设置规则名称和描述
-    filter_desc = ""
-    if filter_config:
-        enabled_filters = [k for k, v in filter_config.items() if v.get('enable', False)]
-        filter_desc = f",过滤器:{','.join(enabled_filters)}"
-    
-    rsi_rule_with_filters.chinese_name = f'RSI规则(周期:{period},超卖:{oversold},超买:{overbought}{filter_desc})'
-    rsi_rule_with_filters.__name__ = f'rsi_rule_{period}_{oversold}_{overbought}'
-    
-    return rsi_rule_with_filters
 
 # 设置中文名称
 adaptive_ma_crossover_rule.chinese_name = '自适应均线交叉规则(固定参数)'

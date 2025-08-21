@@ -1,4 +1,4 @@
-from app.services.strategy_service import simple_backtest
+from app.services.strategy.strategy_service import simple_backtest
 from debug_strategy import debug_basic_strategy_flow
 
 def debug_simple_backtest():
