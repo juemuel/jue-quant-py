@@ -224,34 +224,169 @@ class EnhancedBacktestService:
     def _calculate_trade_statistics(self) -> Dict:
         """
         计算交易统计信息
+        基于交易配对计算，而不是单独的买入或卖出
         """
+        # 添加调试信息
+        print(f"\n=== 调试信息 ===")
+        print(f"总交易记录数: {len(self.trades_history)}")
+        if self.trades_history:
+            # 打印前几条交易记录
+            print("\n前5条交易记录:")
+            for i, trade in enumerate(self.trades_history[:5]):
+                print(f"  {i+1}: {trade}")
+            
+            # 统计买卖交易数量
+            buy_trades = [t for t in self.trades_history if t.get('action') == 'buy']
+            sell_trades = [t for t in self.trades_history if t.get('action') == 'sell']
+            print(f"\n买入交易数: {len(buy_trades)}")
+            print(f"卖出交易数: {len(sell_trades)}")
         if not self.trades_history:
-            return {}
+            return {
+                'total_trades': 0,
+                'completed_pairs': 0,
+                'profitable_trades': 0,
+                'losing_trades': 0,
+                'win_rate': 0,
+                'avg_win': 0,
+                'avg_loss': 0,
+                'profit_factor': 0,
+                'total_trading_costs': 0
+            }
         
+        # 获取完整的买卖配对
+        trade_pairs = self._get_trade_pairs()
+        
+        if not trade_pairs:
+            # 如果没有完成的配对，返回基础统计
+            trades_df = pd.DataFrame(self.trades_history)
+            total_costs = trades_df['trading_cost'].sum() if 'trading_cost' in trades_df.columns else 0
+            
+            return {
+                'total_trades': len(self.trades_history),
+                'completed_pairs': 0,
+                'profitable_trades': 0,
+                'losing_trades': 0,
+                'win_rate': 0,
+                'avg_win': 0,
+                'avg_loss': 0,
+                'profit_factor': 0,
+                'total_trading_costs': total_costs
+            }
+        
+        # 基于配对计算统计 - 使用return_pct而不是net_pnl来判断盈亏
+        profitable_pairs = [p for p in trade_pairs if p['return_pct'] > 0]
+        losing_pairs = [p for p in trade_pairs if p['return_pct'] < 0]
+
+        total_pairs = len(trade_pairs)
+        win_rate = len(profitable_pairs) / total_pairs if total_pairs > 0 else 0
+
+        # 计算平均盈利和亏损百分比
+        avg_win_pct = np.mean([p['return_pct'] for p in profitable_pairs]) if profitable_pairs else 0
+        avg_loss_pct = abs(np.mean([p['return_pct'] for p in losing_pairs])) if losing_pairs else 0
+        
+        # 计算盈亏比
+        profit_factor = avg_win_pct / avg_loss_pct if avg_loss_pct > 0 else float('inf')
+        
+        # 计算总交易成本
         trades_df = pd.DataFrame(self.trades_history)
-        
-        # 盈亏统计
-        profitable_trades = trades_df[trades_df['pnl'] > 0]
-        losing_trades = trades_df[trades_df['pnl'] < 0]
-        
-        win_rate = len(profitable_trades) / len(trades_df) if len(trades_df) > 0 else 0
-        avg_win = profitable_trades['pnl'].mean() if len(profitable_trades) > 0 else 0
-        avg_loss = losing_trades['pnl'].mean() if len(losing_trades) > 0 else 0
-        profit_factor = abs(avg_win / avg_loss) if avg_loss != 0 else float('inf')
-        
-        # 交易成本统计
         total_costs = trades_df['trading_cost'].sum() if 'trading_cost' in trades_df.columns else 0
         
-        return {
-            'total_trades': len(trades_df),
+        # 在return语句之前添加
+        print(f"\n=== _calculate_trade_statistics 返回值 ===")
+        result = {
+            'total_trades': len(self.trades_history),
+            'completed_pairs': total_pairs,
+            'profitable_trades': len(profitable_pairs),
+            'losing_trades': len(losing_pairs),
             'win_rate': win_rate,
-            'avg_win': avg_win,
-            'avg_loss': avg_loss,
+            'avg_win': avg_win_pct,
+            'avg_loss': avg_loss_pct,
             'profit_factor': profit_factor,
             'total_trading_costs': total_costs
         }
-    # 在EnhancedBacktestService类中添加以下缺失的方法
-
+        print(f"返回的统计数据: {result}")
+        return result
+    def _get_trade_pairs(self) -> List[Dict]:
+        """
+        将买卖交易配对，计算每对的盈亏
+        使用FIFO（先进先出）方法配对
+        """
+        pairs = []
+        positions = {}  # {symbol: [buy_trades]}
+        
+        for trade in self.trades_history:
+            symbol = trade['symbol']
+            if symbol not in positions:
+                positions[symbol] = []
+            
+            if trade['action'] == 'buy':
+                # 买入交易加入队列
+                positions[symbol].append(trade)
+            elif trade['action'] == 'sell':
+                # 卖出交易与买入交易配对
+                sell_qty = trade['shares']
+                sell_price = trade['price']
+                sell_cost = trade.get('trading_cost', 0)
+                
+                while sell_qty > 0 and positions[symbol]:
+                    buy_trade = positions[symbol][0]
+                    buy_price = buy_trade['price']
+                    buy_cost = buy_trade.get('trading_cost', 0)
+                    
+                    # 计算这次配对的数量
+                    pair_qty = min(sell_qty, buy_trade['shares'])
+                    
+                    # 计算盈亏
+                    gross_pnl = (sell_price - buy_price) * pair_qty
+                    
+                    # 正确分摊交易成本
+                    allocated_buy_cost = buy_cost * (pair_qty / buy_trade['shares'])
+                    allocated_sell_cost = sell_cost * (pair_qty / trade['shares'])
+                    net_pnl = gross_pnl - allocated_buy_cost - allocated_sell_cost
+                    return_pct = ((sell_price - buy_price) / buy_price) * 100
+                    
+                    pairs.append({
+                        'symbol': symbol,
+                        'buy_date': buy_trade.get('date'),
+                        'sell_date': trade.get('date'),
+                        'buy_price': buy_price,
+                        'sell_price': sell_price,
+                        'quantity': pair_qty,
+                        'gross_pnl': gross_pnl,
+                        'net_pnl': net_pnl,
+                        'return_pct': return_pct,
+                        'holding_days': 0  # 可以后续计算
+                    })
+                    
+                    # 更新剩余数量
+                    buy_trade['shares'] -= pair_qty
+                    sell_qty -= pair_qty
+                    
+                    # 如果买入交易完全配对，移除
+                    if buy_trade['shares'] == 0:
+                        positions[symbol].pop(0)
+        print(f"\n=== 交易配对调试信息 ===")
+        print(f"生成的配对数量: {len(pairs)}")
+        
+        if pairs:
+            print("\n前3个配对详情:")
+            for i, pair in enumerate(pairs[:3]):
+                print(f"  配对{i+1}: {pair}")
+            
+            # 统计盈亏配对
+            profitable = [p for p in pairs if p['net_pnl'] > 0]
+            losing = [p for p in pairs if p['net_pnl'] < 0]
+            print(f"\n盈利配对数: {len(profitable)}")
+            print(f"亏损配对数: {len(losing)}")
+            
+            if profitable:
+                avg_profit_pct = np.mean([p['return_pct'] for p in profitable])
+                print(f"平均盈利百分比: {avg_profit_pct:.2f}%")
+            
+            if losing:
+                avg_loss_pct = np.mean([p['return_pct'] for p in losing])
+                print(f"平均亏损百分比: {avg_loss_pct:.2f}%")
+        return pairs
     def _get_daily_signals(self, signals_df: pd.DataFrame, date) -> List[Dict]:
         """
         获取指定日期的信号
@@ -354,7 +489,6 @@ class EnhancedBacktestService:
                             trades.append(trade)
         
         return trades
-
     def _update_portfolio(self, portfolio: Dict, price_data: pd.Series, trades: List[Dict]) -> Dict:
         """
         根据交易更新投资组合
@@ -401,19 +535,13 @@ class EnhancedBacktestService:
                     if updated_portfolio['positions'][symbol]['shares'] <= 0:
                         del updated_portfolio['positions'][symbol]
             
-            # 记录交易历史
+            # 记录所有交易到历史（简化版本，不计算pnl）
             trade_record = trade.copy()
-            if action == 'sell' and symbol in portfolio['positions']:
-                # 计算盈亏
-                avg_cost = portfolio['positions'][symbol]['avg_price']
-                trade_record['pnl'] = (price - avg_cost) * shares - trading_cost
-            else:
-                trade_record['pnl'] = -trading_cost  # 买入时的成本
-            
+            trade_record['timestamp'] = trade.get('date')
+            # 移除原来的pnl计算，让配对方法来处理
             self.trades_history.append(trade_record)
         
         return updated_portfolio
-
     def _calculate_portfolio_value(self, portfolio: Dict, price_data: pd.Series) -> float:
         """
         计算投资组合总价值

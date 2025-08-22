@@ -106,7 +106,7 @@ def debug_backtest_system():
         )
         
         config = BacktestConfig(
-            initial_capital=100000,
+            initial_capital=1000000,
             trading_cost=trading_cost,
             max_position_size=0.95,
             benchmark_symbol="000300.SH"
@@ -121,20 +121,6 @@ def debug_backtest_system():
         print(f"价格数据列: {list(df.columns)}")
         print(f"信号数量: {len(signals_df)}")
         print(f"信号列: {list(signals_df.columns)}")
-        
-        # 检查信号示例
-        if len(signals_df) > 0:
-            print(f"信号示例（前3条）:")
-            for i, signal in enumerate(signals_df.head(3).to_dict('records')):
-                print(f"  {i+1}: {signal}")
-            
-            # 检查信号的日期范围
-            if 'date' in signals_df.columns:
-                signal_dates = signals_df['date'].dropna()
-                if len(signal_dates) > 0:
-                    print(f"信号日期范围: {signal_dates.min()} 到 {signal_dates.max()}")
-        else:
-            print("❌ 没有有效信号")
         
         print(f"价格数据日期范围: {df['日期'].min()} 到 {df['日期'].max()}")
         
@@ -212,8 +198,15 @@ def debug_backtest_system():
         
         print(f"转换完成，共{len(converted_signals)}个信号")
         print(f"信号强度调整: 原始范围可能很小，已调整为最小0.1")
-        
-                # 使用转换后的信号
+        # 统计信号类型
+        buy_signals = [s for s in converted_signals if s['action'] == 'buy']
+        sell_signals = [s for s in converted_signals if s['action'] == 'sell']
+        print(f"买入信号数量: {len(buy_signals)}")
+        print(f"卖出信号数量: {len(sell_signals)}")
+        if buy_signals:
+            print(f"买入信号示例: {buy_signals[0]}")
+
+        # 使用转换后的信号
         signals_list = converted_signals
         
         # 添加回测前的最终检查
@@ -259,7 +252,7 @@ def debug_backtest_system():
         print(f"最大仓位: {config.max_position_size}")
         print(f"手续费率: {config.trading_cost.commission_rate}")
 
-        # 调用realistic_backtest
+        # # 回测调用：realistic_backtest
         backtest_result = backtest_service.realistic_backtest(
             price_data=price_data_indexed,
             signals=signals_list
@@ -269,7 +262,7 @@ def debug_backtest_system():
             print(f"❌ 回测执行失败: {backtest_result.get('message')}")
             return
         
-        # 4. 分析回测结果
+        # # 4. 分析回测结果
         print("\n4. 分析回测结果...")
         if backtest_result['status'] == 'success':
             result_data = backtest_result['data']
@@ -282,16 +275,16 @@ def debug_backtest_system():
             print(f"夏普比率: {performance_metrics['sharpe_ratio']:.2f}")
             print(f"最大回撤: {performance_metrics['max_drawdown']:.2%}")
             
-            # 交易统计
+        #     # 交易统计
             trade_stats = performance_metrics.get('trade_statistics', {})
             print(f"\n=== 交易统计 ===")
             if trade_stats:
                 print(f"总交易次数: {trade_stats.get('total_trades', 0)}")
-                print(f"盈利交易次数: {trade_stats.get('winning_trades', 0)}")
+                print(f"盈利交易次数: {trade_stats.get('profitable_trades', 0)}")
                 print(f"亏损交易次数: {trade_stats.get('losing_trades', 0)}")
                 print(f"胜率: {trade_stats.get('win_rate', 0):.2%}")
-                print(f"平均盈利: {trade_stats.get('avg_win', 0):.2%}")
-                print(f"平均亏损: {trade_stats.get('avg_loss', 0):.2%}")
+                print(f"平均盈利: {trade_stats.get('avg_win', 0):.2f}%")
+                print(f"平均亏损: {trade_stats.get('avg_loss', 0):.2f}%")
                 print(f"盈亏比: {trade_stats.get('profit_factor', 0):.2f}")
                 print(f"总交易成本: {trade_stats.get('total_trading_costs', 0):.2f}")
             else:
@@ -309,23 +302,12 @@ def debug_backtest_system():
         # 5. 导出回测结果
         print("\n5. 导出回测结果...")
         try:
-            # 准备导出数据
-            export_data = {
-                '回测配置': {
-                    '初始资金': config.initial_capital,
-                    '手续费率': config.trading_cost.commission_rate,
-                    '印花税率': config.trading_cost.stamp_tax_rate,
-                    '最大仓位': config.max_position_size,
-                    '基准指数': config.benchmark_symbol
-                },
-                '回测结果': result_data,
-                '信号数据': signals_list,
-                '价格数据': df
-            }
-            
-            # 使用save_custom_data方法
-            filename = excel_storage.save_custom_data(
-                data_dict=export_data,
+            # 使用新的专门方法导出回测结果
+            filename = excel_storage.save_backtest_results(
+                backtest_result=backtest_result,
+                config=config,
+                signals_data=signals_list,
+                price_data=price_data_indexed,
                 filename_prefix="backtest_results"
             )
             print(f"✓ 回测结果已导出到: {filename}")

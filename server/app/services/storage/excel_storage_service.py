@@ -248,6 +248,101 @@ class ExcelStorageService:
             logger.error(f"保存统一策略数据失败: {e}")
             raise
     
+    def save_backtest_results(self, 
+                         backtest_result: Dict[str, Any],
+                         config: Any = None,
+                         signals_data: List[Dict] = None,
+                         price_data: pd.DataFrame = None,
+                         filename_prefix: str = "backtest_results") -> str:
+        """
+        保存回测结果到Excel，将数据分别保存到不同的工作表
+        
+        Args:
+            backtest_result: 回测结果数据
+            config: 回测配置
+            signals_data: 信号数据
+            price_data: 价格数据
+            filename_prefix: 文件名前缀
+            
+        Returns:
+            保存的文件路径
+        """
+        excel_file = self._generate_filename(filename_prefix)
+        
+        try:
+            with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
+                # 1. 回测摘要（核心指标）
+                if backtest_result.get('data'):
+                    data = backtest_result['data']
+                    performance_metrics = data.get('performance_metrics', {})
+                    
+                    summary_data = {
+                        '指标': ['总收益率', '年化收益率', '最大回撤', '夏普比率', '胜率', '总交易次数', '盈利交易次数', '亏损交易次数'],
+                        '数值': [
+                            f"{performance_metrics.get('total_return', 0):.2%}",
+                            f"{performance_metrics.get('annual_return', 0):.2%}",
+                            f"{performance_metrics.get('max_drawdown', 0):.2%}",
+                            f"{performance_metrics.get('sharpe_ratio', 0):.2f}",
+                            f"{performance_metrics.get('win_rate', 0):.2%}",
+                            performance_metrics.get('total_trades', 0),
+                            performance_metrics.get('profitable_trades', 0),
+                            performance_metrics.get('losing_trades', 0)
+                        ]
+                    }
+                    summary_df = pd.DataFrame(summary_data)
+                    summary_df.to_excel(writer, sheet_name='回测摘要', index=False)
+                
+                # 2. 组合价值历史
+                portfolio_history = backtest_result.get('data', {}).get('portfolio_history', [])
+                if portfolio_history:
+                    portfolio_df = self._safe_dataframe_conversion(portfolio_history, '组合价值历史')
+                    portfolio_df.to_excel(writer, sheet_name='组合价值历史', index=False)
+                
+                # 3. 交易历史
+                trades_history = backtest_result.get('data', {}).get('trades_history', [])
+                if trades_history:
+                    trades_df = self._safe_dataframe_conversion(trades_history, '交易历史')
+                    trades_df.to_excel(writer, sheet_name='交易历史', index=False)
+                
+                # 4. 详细性能指标
+                performance_metrics = backtest_result.get('data', {}).get('performance_metrics', {})
+                if performance_metrics:
+                    perf_df = self._safe_dataframe_conversion(performance_metrics, '性能指标')
+                    perf_df.to_excel(writer, sheet_name='性能指标', index=False)
+                
+                # 5. 回测配置
+                if config:
+                    config_data = {
+                        '配置项': ['初始资金', '手续费率', '印花税率', '过户费率', '最低手续费', '滑点率', '最大仓位', '基准指数'],
+                        '数值': [
+                            config.initial_capital,
+                            config.trading_cost.commission_rate,
+                            config.trading_cost.stamp_tax_rate,
+                            config.trading_cost.transfer_fee_rate,
+                            config.trading_cost.min_commission,
+                            config.trading_cost.slippage_rate,
+                            config.max_position_size,
+                            config.benchmark_symbol or 'N/A'
+                        ]
+                    }
+                    config_df = pd.DataFrame(config_data)
+                    config_df.to_excel(writer, sheet_name='回测配置', index=False)
+                
+                # 6. 交易信号
+                if signals_data:
+                    signals_df = self._safe_dataframe_conversion(signals_data, '交易信号')
+                    signals_df.to_excel(writer, sheet_name='交易信号', index=False)
+                
+                # 7. 价格数据（可选，数据量大时可能影响性能）
+                if price_data is not None and len(price_data) <= 1000:  # 限制行数避免文件过大
+                    price_data.to_excel(writer, sheet_name='价格数据', index=False)
+                
+                logger.info(f"回测结果已保存到: {excel_file}")
+                return excel_file
+                
+        except Exception as e:
+            logger.error(f"保存回测结果失败: {e}")
+            raise
     def save_custom_data(self, 
                         data_dict: Dict[str, Any],
                         filename_prefix: str = "custom_data",
