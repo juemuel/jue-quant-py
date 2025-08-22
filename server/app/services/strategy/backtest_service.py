@@ -58,12 +58,34 @@ class EnhancedBacktestService:
                 signals_df['date'] = pd.to_datetime(signals_df['timestamp']).dt.date
             
             # 遍历每个交易日
-            for date in price_data.index:
+            total_days = len(price_data.index)
+            signal_days = 0
+            trade_days = 0
+            
+            for i, date in enumerate(price_data.index):
                 # 获取当日信号
                 daily_signals = self._get_daily_signals(signals_df, date)
                 
+                # 添加调试信息
+                if daily_signals:
+                    signal_days += 1
+                    logger.info(f"[Backtest]日期 {date.date()}: 找到 {len(daily_signals)} 个信号")
+                    for j, signal in enumerate(daily_signals):
+                        logger.info(f"[Backtest]  信号{j+1}: {signal['action']} {signal['symbol']} 强度:{signal['strength']}")
+                
                 # 执行交易（考虑交易成本）
                 trades = self._execute_trades_with_costs(daily_signals, price_data.loc[date], portfolio)
+                
+                # 添加交易调试信息
+                if trades:
+                    trade_days += 1
+                    logger.info(f"[Backtest]日期 {date.date()}: 执行了 {len(trades)} 笔交易")
+                    for j, trade in enumerate(trades):
+                        logger.info(f"[Backtest]  交易{j+1}: {trade['action']} {trade['symbol']} {trade['shares']}股 @{trade['price']}")
+                elif daily_signals:
+                    logger.warning(f"[Backtest]日期 {date.date()}: 有信号但未执行交易")
+                    logger.warning(f"[Backtest]  当前现金: {portfolio['cash']:.2f}")
+                    logger.warning(f"[Backtest]  当前持仓: {list(portfolio['positions'].keys())}")
                 
                 # 更新投资组合
                 portfolio = self._update_portfolio(portfolio, price_data.loc[date], trades)
@@ -76,6 +98,10 @@ class EnhancedBacktestService:
                     'cash': portfolio['cash'],
                     'positions': portfolio['positions'].copy()
                 })
+                
+                # 每50天打印一次进度
+                if (i + 1) % 50 == 0 or i == total_days - 1:
+                    logger.info(f"[Backtest]进度: {i+1}/{total_days} 天, 信号天数: {signal_days}, 交易天数: {trade_days}")
                 
                 # 计算日收益率
                 if len(self.portfolio_history) > 1:
@@ -224,7 +250,184 @@ class EnhancedBacktestService:
             'profit_factor': profit_factor,
             'total_trading_costs': total_costs
         }
-    
+    # 在EnhancedBacktestService类中添加以下缺失的方法
+
+    def _get_daily_signals(self, signals_df: pd.DataFrame, date) -> List[Dict]:
+        """
+        获取指定日期的信号
+        """
+        if signals_df.empty:
+            return []
+        
+        # 统一日期格式处理
+        if hasattr(date, 'date'):
+            target_date = date.date()
+        elif hasattr(date, 'strftime'):
+            target_date = date.date() if hasattr(date, 'date') else date
+        else:
+            target_date = pd.to_datetime(date).date()
+        
+        # 筛选当日信号
+        if 'date' in signals_df.columns:
+            # 确保date列是日期类型
+            signals_df['date'] = pd.to_datetime(signals_df['date']).dt.date
+            daily_signals = signals_df[signals_df['date'] == target_date]
+        elif 'timestamp' in signals_df.columns:
+            # 确保timestamp列是日期时间类型
+            signals_df['timestamp'] = pd.to_datetime(signals_df['timestamp'])
+            daily_signals = signals_df[signals_df['timestamp'].dt.date == target_date]
+        else:
+            return []
+        
+        return daily_signals.to_dict('records')
+    def _execute_trades_with_costs(self, signals: List[Dict], price_data: pd.Series, portfolio: Dict) -> List[Dict]:
+        """
+        执行交易并计算交易成本
+        """
+        trades = []
+        
+        # 添加调试信息
+        if signals:
+            logger.debug(f"[Trade]处理 {len(signals)} 个信号, 当前现金: {portfolio['cash']:.2f}")
+            logger.debug(f"[Trade]价格数据: {dict(price_data)}")
+        
+        for signal in signals:
+            if signal.get('action') in ['buy', 'sell']:
+                symbol = signal.get('symbol', '000001.SH')
+                action = signal['action']
+                strength = signal.get('strength', 0.5)
+                
+                logger.debug(f"[Trade]处理信号: {action} {symbol} 强度:{strength}")
+                
+                # 获取当前价格
+                current_price = price_data.get('close', price_data.get('收盘价', 0))
+                if current_price <= 0:
+                    logger.warning(f"[Trade]无效价格 {current_price} for {symbol}")
+                    continue
+                
+                logger.debug(f"[Trade]当前价格: {current_price}")
+                
+                # 计算交易数量
+                if action == 'buy':
+                    # 根据信号强度和可用资金计算买入数量
+                    available_cash = portfolio['cash']
+                    position_value = available_cash * strength * self.config.max_position_size
+                    shares = int(position_value / current_price / 100) * 100  # 按手交易
+                    
+                    if shares > 0:
+                        trade_amount = shares * current_price
+                        trading_cost = self._calculate_trading_costs(trade_amount, current_price, 'buy')
+                        
+                        if available_cash >= trade_amount + trading_cost:
+                            trade = {
+                                'symbol': symbol,
+                                'action': 'buy',
+                                'shares': shares,
+                                'price': current_price,
+                                'amount': trade_amount,
+                                'trading_cost': trading_cost,
+                                'timestamp': price_data.name,
+                                'signal_strength': strength
+                            }
+                            trades.append(trade)
+                
+                elif action == 'sell':
+                    # 卖出现有持仓
+                    if symbol in portfolio['positions']:
+                        current_shares = portfolio['positions'][symbol]['shares']
+                        sell_shares = int(current_shares * strength)
+                        
+                        if sell_shares > 0:
+                            trade_amount = sell_shares * current_price
+                            trading_cost = self._calculate_trading_costs(trade_amount, current_price, 'sell')
+                            
+                            trade = {
+                                'symbol': symbol,
+                                'action': 'sell',
+                                'shares': sell_shares,
+                                'price': current_price,
+                                'amount': trade_amount,
+                                'trading_cost': trading_cost,
+                                'timestamp': price_data.name,
+                                'signal_strength': strength
+                            }
+                            trades.append(trade)
+        
+        return trades
+
+    def _update_portfolio(self, portfolio: Dict, price_data: pd.Series, trades: List[Dict]) -> Dict:
+        """
+        根据交易更新投资组合
+        """
+        updated_portfolio = portfolio.copy()
+        updated_portfolio['positions'] = portfolio['positions'].copy()
+        
+        for trade in trades:
+            symbol = trade['symbol']
+            action = trade['action']
+            shares = trade['shares']
+            price = trade['price']
+            trading_cost = trade['trading_cost']
+            
+            if action == 'buy':
+                # 更新现金
+                updated_portfolio['cash'] -= (trade['amount'] + trading_cost)
+                
+                # 更新持仓
+                if symbol in updated_portfolio['positions']:
+                    old_shares = updated_portfolio['positions'][symbol]['shares']
+                    old_avg_price = updated_portfolio['positions'][symbol]['avg_price']
+                    new_shares = old_shares + shares
+                    new_avg_price = (old_shares * old_avg_price + shares * price) / new_shares
+                    updated_portfolio['positions'][symbol] = {
+                        'shares': new_shares,
+                        'avg_price': new_avg_price
+                    }
+                else:
+                    updated_portfolio['positions'][symbol] = {
+                        'shares': shares,
+                        'avg_price': price
+                    }
+            
+            elif action == 'sell':
+                # 更新现金
+                updated_portfolio['cash'] += (trade['amount'] - trading_cost)
+                
+                # 更新持仓
+                if symbol in updated_portfolio['positions']:
+                    updated_portfolio['positions'][symbol]['shares'] -= shares
+                    
+                    # 如果持仓为0，删除该持仓
+                    if updated_portfolio['positions'][symbol]['shares'] <= 0:
+                        del updated_portfolio['positions'][symbol]
+            
+            # 记录交易历史
+            trade_record = trade.copy()
+            if action == 'sell' and symbol in portfolio['positions']:
+                # 计算盈亏
+                avg_cost = portfolio['positions'][symbol]['avg_price']
+                trade_record['pnl'] = (price - avg_cost) * shares - trading_cost
+            else:
+                trade_record['pnl'] = -trading_cost  # 买入时的成本
+            
+            self.trades_history.append(trade_record)
+        
+        return updated_portfolio
+
+    def _calculate_portfolio_value(self, portfolio: Dict, price_data: pd.Series) -> float:
+        """
+        计算投资组合总价值
+        """
+        total_value = portfolio['cash']
+        current_price = price_data.get('close', price_data.get('收盘价', 0))
+        
+        # 计算持仓价值
+        for symbol, position in portfolio['positions'].items():
+            # 这里简化处理，假设所有持仓都是同一只股票
+            position_value = position['shares'] * current_price
+            total_value += position_value
+        
+        return total_value
     # 其他辅助方法...
     def _initialize_portfolio(self) -> Dict:
         return {
