@@ -48,35 +48,35 @@ class DataProcessor:
         :param use_chinese: 是否使用中文字段名（用于字段名转换）
         :return: 过滤后的DataFrame
         """
-        logger.info(f"[_filter_fields] 输入参数 - data_type: {data_type}, core_only: {core_only}, fields: {fields}, use_chinese: {use_chinese}")
-        logger.info(f"[_filter_fields] DataFrame列名: {list(df.columns)}")
+        # logger.info(f"[_filter_fields] 输入参数 - data_type: {data_type}, core_only: {core_only}, fields: {fields}, use_chinese: {use_chinese}")
+        # logger.info(f"[_filter_fields] DataFrame列名: {list(df.columns)}")
         
         # 优先处理自定义fields的情况
         if fields:
             # 指定字段过滤
             field_list = [f.strip() for f in fields.split(',')]
-            logger.info(f"[_filter_fields] 指定字段列表: {field_list}")
+            # logger.info(f"[_filter_fields] 指定字段列表: {field_list}")
             
             available_fields = [f for f in field_list if f in df.columns]
-            logger.info(f"[_filter_fields] 匹配到的字段: {available_fields}")
+            # logger.info(f"[_filter_fields] 匹配到的字段: {available_fields}")
             if available_fields:
-                logger.info(f"[_filter_fields] 返回指定字段: {available_fields}")
+                # logger.info(f"[_filter_fields] 返回指定字段: {available_fields}")
                 return df[available_fields]
             else:
-                logger.warning(f"[_filter_fields] 指定字段 {field_list} 在DataFrame中未找到，fallback到核心字段")
+                # logger.warning(f"[_filter_fields] 指定字段 {field_list} 在DataFrame中未找到，fallback到核心字段")
                 # 如果没有匹配的字段，返回核心字段
                 available_core_fields = [f for f in CORE_FIELDS.get(data_type, []) if f in df.columns]
-                logger.info(f"[_filter_fields] fallback核心字段: {available_core_fields}")
+                # logger.info(f"[_filter_fields] fallback核心字段: {available_core_fields}")
                 if available_core_fields:
                     return df[available_core_fields]
         elif core_only:
             # 只有在没有指定 fields 时才考虑 core_only
             available_core_fields = [f for f in CORE_FIELDS.get(data_type, []) if f in df.columns]
-            logger.info(f"[_filter_fields] 核心字段: {CORE_FIELDS.get(data_type, [])}")
-            logger.info(f"[_filter_fields] 可用核心字段: {available_core_fields}")
+            # logger.info(f"[_filter_fields] 核心字段: {CORE_FIELDS.get(data_type, [])}")
+            # logger.info(f"[_filter_fields] 可用核心字段: {available_core_fields}")
             if available_core_fields:
                 return df[available_core_fields]
-        logger.info(f"[_filter_fields] 返回原始DataFrame")
+        # logger.info(f"[_filter_fields] 返回原始DataFrame")
         return df
     # 中文化处理    
     @staticmethod

@@ -25,7 +25,7 @@ def debug_backtest_system():
             source="akshare",
             code="000001", 
             market="SH",
-            start_date="20240301",
+            start_date="20240101",
             end_date="20241201"
         )
         
@@ -45,12 +45,12 @@ def debug_backtest_system():
         data_signal_config = {
             'ma_crossover': {
                 'enable': True,
-                'use_parameterized': False,
-                'short_period': 5,
-                'long_period': 20,
-                'adaptive': True,
+                'use_parameterized': False,   # False固定参数，与debug_basic_strategy_flow一致；True参数化,支持adaptive自适应，filter过滤参数配置；
+                'short_period': 5,           # 与debug_basic_strategy_flow相同
+                'long_period': 20,           # 与debug_basic_strategy_flow相同
+                'adaptive': True,            # 启用自适应周期适配（需要use_parameterized为True）
                 'filter_config': {
-                    'volatility_filter': {'enable': False, 'min_volatility': 0.3, 'max_volatility': 1},
+                    'volatility_filter': {'enable': False, 'min_volatility': 0.3, 'max_volatility': 1},  # 禁用过滤器
                     'volume_confirmation': {'enable': False, 'volume_multiplier': 1, 'lookback_days': 20},
                     'trend_strength_filter': {'enable': False, 'min_adx': 25},
                     'signal_strength_filter': {'enable': False, 'min_strength': 0.3}
@@ -58,13 +58,13 @@ def debug_backtest_system():
             },
             'rsi': {
                 'enable': True,
-                'use_parameterized': False,
-                'period': 14,
-                'oversold': 30,
-                'overbought': 70,
-                'adaptive': True,
+                'use_parameterized': False,   # False固定参数，与debug_basic_strategy_flow一致；True参数化,支持adaptive自适应，filter过滤参数配置；
+                'period': 14,                # 与debug_basic_strategy_flow相同
+                'oversold': 30,              # 与debug_basic_strategy_flow相同
+                'overbought': 70,            # 与debug_basic_strategy_flow相同
+                'adaptive': True,            # 启用自适应周期适配（需要use_parameterized为True）
                 'filter_config': {
-                    'volume_confirmation': {'enable': False, 'volume_multiplier': 1, 'lookback_days': 20},
+                    'volume_confirmation': {'enable': False, 'volume_multiplier': 1, 'lookback_days': 20},  # 禁用过滤器
                     'volatility_filter': {'enable': False, 'min_volatility': 0.3, 'max_volatility': 0.5},
                     'trend_strength_filter': {'enable': False, 'min_adx': 25},
                     'signal_strength_filter': {'enable': False, 'min_strength': 0.3}
@@ -226,14 +226,10 @@ def debug_backtest_system():
             return
         
         # 检查几个具体日期的信号和价格匹配
-        print(f"\n=== 具体日期检查 ===")
-        for i, signal in enumerate(signals_list[:3]):
+        print(f"\n=== 前10个信号详情 ===")
+        for i, signal in enumerate(signals_list[:10]):
             signal_date = pd.to_datetime(signal['timestamp']).date()
-            print(f"\n信号 {i+1}:")
-            print(f"  日期: {signal_date}")
-            print(f"  动作: {signal['action']}")
-            print(f"  强度: {signal['strength']}")
-            print(f"  股票: {signal['symbol']}")
+            print(f"信号{i+1}: {signal_date} | {signal['action']} | 强度:{signal['strength']:.3f} | {signal['symbol']}")
             
             # 检查该日期是否在价格数据中
             matching_dates = [d for d in price_data_indexed.index if d.date() == signal_date]
@@ -275,8 +271,8 @@ def debug_backtest_system():
             print(f"夏普比率: {performance_metrics['sharpe_ratio']:.2f}")
             print(f"最大回撤: {performance_metrics['max_drawdown']:.2%}")
             
-        #     # 交易统计
-            trade_stats = performance_metrics.get('trade_statistics', {})
+            # 交易统计 - 从result_data中获取，而不是从performance_metrics中获取
+            trade_stats = result_data.get('trade_statistics', {})
             print(f"\n=== 交易统计 ===")
             if trade_stats:
                 print(f"总交易次数: {trade_stats.get('total_trades', 0)}")
@@ -287,9 +283,11 @@ def debug_backtest_system():
                 print(f"平均亏损: {trade_stats.get('avg_loss', 0):.2f}%")
                 print(f"盈亏比: {trade_stats.get('profit_factor', 0):.2f}")
                 print(f"总交易成本: {trade_stats.get('total_trading_costs', 0):.2f}")
+                print(f"初始资产: {trade_stats.get('initial_capital', 0):.2f}")
+                print(f"最终资产: {trade_stats.get('final_portfolio_value', 0):.2f}")
             else:
                 print("没有执行任何交易")
-            
+    
             # 基准对比（如果有）
             benchmark_metrics = performance_metrics['benchmark_metrics']
             if benchmark_metrics:

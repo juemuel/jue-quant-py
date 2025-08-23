@@ -2,6 +2,7 @@ import time
 import akshare as ak
 import pandas as pd
 from core.logger import logger
+from common.debug_utils import debug_data_provider
 class AkShareProvider:
     # 1.1.1 获取所有股票列表（可用）
     def get_all_stocks(self, source, market=None):
@@ -89,9 +90,27 @@ class AkShareProvider:
         :return: DataFrame
         """
         logger.info(f"[Provider]source={source}, code={code}, market={market}, start_date={start_date}, end_date={end_date}")
-        df = ak.stock_zh_a_hist(symbol=code, period='daily', start_date=start_date, end_date=end_date, adjust='hfq')
-        logger.info(f"[Provider]列名: {df.columns.tolist()}")
-        logger.info(f"[Provider]行数: {len(df)}")
+        df = ak.stock_zh_a_hist(symbol=code, period='daily', start_date=start_date, end_date=end_date, adjust='qfq')
+        
+        # 使用环境变量控制的调试输出
+        debug_data_provider("AkShare原始数据检查", {
+            "返回数据行数": len(df),
+            "返回列名": df.columns.tolist(),
+            "第一行数据": df.iloc[0].to_dict() if len(df) > 0 else None,
+            "价格列数据类型": {col: str(df[col].dtype) for col in ['开盘', '收盘', '最高', '最低'] if col in df.columns}
+        })
+        
+        # 详细的价格数据检查（仅在DEBUG级别显示）
+        if len(df) > 0:
+            price_columns = ['开盘', '收盘', '最高', '最低']
+            for col in price_columns:
+                if col in df.columns:
+                    debug_data_provider(f"{col}列详细信息", {
+                        "前5行原始值": df[col].head().tolist(),
+                        "数据类型": str(df[col].dtype),
+                        "是否有空值": df[col].isnull().sum(),
+                        "统计信息": df[col].describe().to_dict()
+                    }, level="DEBUG")
         return df
 
     # 1.3.1 获取股票实时行情（可用）

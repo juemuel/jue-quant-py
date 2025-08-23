@@ -12,8 +12,8 @@ class TradingCost:
     stamp_tax_rate: float = 0.001    # 印花税率（仅卖出）
     transfer_fee_rate: float = 0.00002  # 过户费率
     min_commission: float = 5.0      # 最低手续费
-    slippage_rate: float = 0.001     # 滑点率
-    market_impact_factor: float = 0.1 # 市场冲击因子
+    slippage_rate: float = 0.0005    # 降低滑点率从0.001到0.0005
+    market_impact_factor: float = 0.05 # 降低市场冲击因子从0.1到0.05
 
 @dataclass
 class BacktestConfig:
@@ -119,10 +119,53 @@ class EnhancedBacktestService:
                         benchmark_return = (curr_benchmark - prev_benchmark) / prev_benchmark
                         benchmark_returns.append(benchmark_return)
             
+            # 在主回测循环结束后添加强制平仓逻辑
+            final_date = price_data.index[-1]
+            final_prices = price_data.iloc[-1]
+            
+            # 强制平仓所有持仓
+            if portfolio['positions']:
+                logger.info(f"[Backtest]回测结束，强制平仓所有持仓")
+                for symbol, position in portfolio['positions'].items():
+                    if position['shares'] > 0:
+                        # 获取最终价格
+                        if isinstance(final_prices, pd.Series):
+                            current_price = final_prices.get('close', final_prices.get('收盘价', position['avg_price']))
+                        else:
+                            current_price = final_prices
+                        
+                        if pd.notna(current_price) and current_price > 0:
+                            # 创建强制卖出交易
+                            trade_amount = position['shares'] * current_price
+                            trading_cost = self._calculate_trading_costs(trade_amount, current_price, 'sell')
+                            
+                            force_sell_trade = {
+                                'symbol': symbol,
+                                'action': 'sell',
+                                'shares': position['shares'],
+                                'price': current_price,
+                                'amount': trade_amount,
+                                'trading_cost': trading_cost,
+                                'timestamp': final_date,
+                                'signal_strength': 1.0,
+                                'force_close': True  # 标记为强制平仓
+                            }
+                            
+                            # 更新投资组合
+                            portfolio['cash'] += trade_amount - trading_cost
+                            portfolio['positions'][symbol]['shares'] = 0
+                            
+                            # 记录交易
+                            self.trades_history.append(force_sell_trade)  # 修复：使用正确的属性名
+                            logger.info(f"[Backtest]强制平仓 {symbol}: {position['shares']}股 @ {current_price:.2f}")
+            
             # 计算性能指标
             performance_metrics = self._calculate_enhanced_metrics(
                 daily_returns, benchmark_returns, self.portfolio_history
             )
+            
+            # 计算交易统计信息
+            trade_statistics = self._calculate_trade_statistics()
             
             return {
                 'status': 'success',
@@ -130,6 +173,7 @@ class EnhancedBacktestService:
                     'portfolio_history': self.portfolio_history,
                     'trades_history': self.trades_history,
                     'performance_metrics': performance_metrics,
+                    'trade_statistics': trade_statistics,  # 添加交易统计信息
                     'config': self.config.__dict__
                 },
                 'message': f'增强版回测完成，共{len(self.trades_history)}笔交易'
@@ -187,17 +231,17 @@ class EnhancedBacktestService:
         drawdown = (np.array(portfolio_values) - peak) / peak
         max_drawdown = np.min(drawdown)
         
-        # 与基准对比
         benchmark_metrics = {}
         if benchmark_returns:
             benchmark_series = pd.Series(benchmark_returns)
             benchmark_total_return = (1 + benchmark_series).prod() - 1
             benchmark_volatility = benchmark_series.std() * np.sqrt(252)
             
-            # 计算Alpha和Beta
+            # 计算Alpha和Beta - 修复除零错误
             if len(returns) == len(benchmark_returns):
                 covariance = np.cov(returns, benchmark_returns)[0][1]
-                beta = covariance / (benchmark_volatility / np.sqrt(252)) ** 2 if benchmark_volatility > 0 else 0
+                benchmark_variance = benchmark_series.var()  # 使用日收益率的方差
+                beta = covariance / benchmark_variance if benchmark_variance > 0 else 0
                 alpha = annual_return - (self.config.risk_free_rate + beta * (benchmark_total_return * 252 / len(benchmark_returns) - self.config.risk_free_rate))
                 
                 benchmark_metrics = {
@@ -229,6 +273,18 @@ class EnhancedBacktestService:
         # 添加调试信息
         print(f"\n=== 调试信息 ===")
         print(f"总交易记录数: {len(self.trades_history)}")
+        
+        # 获取初始和最终资产价值
+        initial_capital = self.config.initial_capital
+        final_portfolio_value = self.portfolio_history[-1]['value'] if self.portfolio_history else initial_capital
+        total_return = (final_portfolio_value - initial_capital) / initial_capital * 100
+        
+        print(f"\n=== 资产概览 ===")
+        print(f"初始资产: ¥{initial_capital:,.2f}")
+        print(f"最终资产: ¥{final_portfolio_value:,.2f}")
+        print(f"总收益: ¥{final_portfolio_value - initial_capital:,.2f}")
+        print(f"总收益率: {total_return:.2f}%")
+        
         if self.trades_history:
             # 打印前几条交易记录
             print("\n前5条交易记录:")
@@ -240,7 +296,11 @@ class EnhancedBacktestService:
             sell_trades = [t for t in self.trades_history if t.get('action') == 'sell']
             print(f"\n买入交易数: {len(buy_trades)}")
             print(f"卖出交易数: {len(sell_trades)}")
+        
+        print("\n=== 开始计算交易统计 ===")
+        
         if not self.trades_history:
+            print("没有交易记录，返回默认统计")
             return {
                 'total_trades': 0,
                 'completed_pairs': 0,
@@ -250,62 +310,114 @@ class EnhancedBacktestService:
                 'avg_win': 0,
                 'avg_loss': 0,
                 'profit_factor': 0,
-                'total_trading_costs': 0
+                'total_trading_costs': 0,
+                'initial_capital': initial_capital,
+                'final_portfolio_value': final_portfolio_value,
+                'total_return_amount': final_portfolio_value - initial_capital,
+                'total_return_pct': total_return
             }
         
-        # 获取完整的买卖配对
-        trade_pairs = self._get_trade_pairs()
-        
-        if not trade_pairs:
-            # 如果没有完成的配对，返回基础统计
+        try:
+            print("正在获取交易配对...")
+            # 获取完整的买卖配对
+            trade_pairs = self._get_trade_pairs()
+            print(f"获取到 {len(trade_pairs)} 个交易配对")
+            
+            if not trade_pairs:
+                print("没有完成的配对，返回基础统计")
+                # 如果没有完成的配对，返回基础统计
+                trades_df = pd.DataFrame(self.trades_history)
+                total_costs = trades_df['trading_cost'].sum() if 'trading_cost' in trades_df.columns else 0
+                
+                return {
+                    'total_trades': len(self.trades_history),
+                    'completed_pairs': 0,
+                    'profitable_trades': 0,
+                    'losing_trades': 0,
+                    'win_rate': 0,
+                    'avg_win': 0,
+                    'avg_loss': 0,
+                    'profit_factor': 0,
+                    'total_trading_costs': total_costs,
+                    'initial_capital': initial_capital,
+                    'final_portfolio_value': final_portfolio_value,
+                    'total_return_amount': final_portfolio_value - initial_capital,
+                    'total_return_pct': total_return
+                }
+            
+            print("正在分析盈亏配对...")
+            # 基于配对计算统计 - 使用return_pct而不是net_pnl来判断盈亏
+            profitable_pairs = [p for p in trade_pairs if p['return_pct'] > 0]
+            losing_pairs = [p for p in trade_pairs if p['return_pct'] < 0]
+            print(f"盈利配对: {len(profitable_pairs)}, 亏损配对: {len(losing_pairs)}")
+            
+            total_pairs = len(trade_pairs)
+            print(f"计算胜率: {len(profitable_pairs)} / {total_pairs}")
+            win_rate = len(profitable_pairs) / total_pairs if total_pairs > 0 else 0
+            print(f"胜率: {win_rate}")
+            
+            print("计算平均盈利...")
+            # 计算平均盈利和亏损百分比
+            if profitable_pairs:
+                profitable_returns = [p['return_pct'] for p in profitable_pairs]
+                print(f"盈利配对收益率: {profitable_returns}")
+                avg_win_pct = np.mean(profitable_returns)
+                print(f"平均盈利百分比: {avg_win_pct}")
+            else:
+                avg_win_pct = 0
+                print("没有盈利配对")
+            
+            print("计算平均亏损...")
+            if losing_pairs:
+                losing_returns = [p['return_pct'] for p in losing_pairs]
+                print(f"亏损配对收益率: {losing_returns}")
+                avg_loss_pct = abs(np.mean(losing_returns))
+                print(f"平均亏损百分比: {avg_loss_pct}")
+            else:
+                avg_loss_pct = 0
+                print("没有亏损配对")
+            
+            print(f"计算盈亏比: {avg_win_pct} / {avg_loss_pct}")
+            # 计算盈亏比
+            if avg_loss_pct > 0:
+                profit_factor = avg_win_pct / avg_loss_pct
+                print(f"盈亏比: {profit_factor}")
+            else:
+                profit_factor = float('inf') if avg_win_pct > 0 else 0
+                print(f"盈亏比: {profit_factor} (无亏损或无盈利)")
+            
+            print("计算总交易成本...")
+            # 计算总交易成本
             trades_df = pd.DataFrame(self.trades_history)
             total_costs = trades_df['trading_cost'].sum() if 'trading_cost' in trades_df.columns else 0
+            print(f"总交易成本: {total_costs}")
             
-            return {
+            # 在return语句之前添加
+            print(f"\n=== _calculate_trade_statistics 返回值 ===")
+            result = {
                 'total_trades': len(self.trades_history),
-                'completed_pairs': 0,
-                'profitable_trades': 0,
-                'losing_trades': 0,
-                'win_rate': 0,
-                'avg_win': 0,
-                'avg_loss': 0,
-                'profit_factor': 0,
-                'total_trading_costs': total_costs
+                'completed_pairs': total_pairs,
+                'profitable_trades': len(profitable_pairs),
+                'losing_trades': len(losing_pairs),
+                'win_rate': win_rate,
+                'avg_win': avg_win_pct,
+                'avg_loss': avg_loss_pct,
+                'profit_factor': profit_factor,
+                'total_trading_costs': total_costs,
+                'initial_capital': initial_capital,
+                'final_portfolio_value': final_portfolio_value,
+                'total_return_amount': final_portfolio_value - initial_capital,
+                'total_return_pct': total_return
             }
-        
-        # 基于配对计算统计 - 使用return_pct而不是net_pnl来判断盈亏
-        profitable_pairs = [p for p in trade_pairs if p['return_pct'] > 0]
-        losing_pairs = [p for p in trade_pairs if p['return_pct'] < 0]
-
-        total_pairs = len(trade_pairs)
-        win_rate = len(profitable_pairs) / total_pairs if total_pairs > 0 else 0
-
-        # 计算平均盈利和亏损百分比
-        avg_win_pct = np.mean([p['return_pct'] for p in profitable_pairs]) if profitable_pairs else 0
-        avg_loss_pct = abs(np.mean([p['return_pct'] for p in losing_pairs])) if losing_pairs else 0
-        
-        # 计算盈亏比
-        profit_factor = avg_win_pct / avg_loss_pct if avg_loss_pct > 0 else float('inf')
-        
-        # 计算总交易成本
-        trades_df = pd.DataFrame(self.trades_history)
-        total_costs = trades_df['trading_cost'].sum() if 'trading_cost' in trades_df.columns else 0
-        
-        # 在return语句之前添加
-        print(f"\n=== _calculate_trade_statistics 返回值 ===")
-        result = {
-            'total_trades': len(self.trades_history),
-            'completed_pairs': total_pairs,
-            'profitable_trades': len(profitable_pairs),
-            'losing_trades': len(losing_pairs),
-            'win_rate': win_rate,
-            'avg_win': avg_win_pct,
-            'avg_loss': avg_loss_pct,
-            'profit_factor': profit_factor,
-            'total_trading_costs': total_costs
-        }
-        print(f"返回的统计数据: {result}")
-        return result
+            print(f"返回的统计数据: {result}")
+            return result
+            
+        except Exception as e:
+            print(f"\n❌ _calculate_trade_statistics 中发生错误: {e}")
+            print(f"错误类型: {type(e).__name__}")
+            import traceback
+            print(f"错误堆栈: {traceback.format_exc()}")
+            raise e
     def _get_trade_pairs(self) -> List[Dict]:
         """
         将买卖交易配对，计算每对的盈亏
@@ -333,17 +445,25 @@ class EnhancedBacktestService:
                     buy_price = buy_trade['price']
                     buy_cost = buy_trade.get('trading_cost', 0)
                     
+                    # 检查买入交易的股票数量是否有效
+                    if buy_trade['shares'] <= 0:
+                        print(f"⚠️ 警告: 发现无效的买入交易股票数量: {buy_trade}")
+                        positions[symbol].pop(0)  # 移除无效交易
+                        continue
+                    
                     # 计算这次配对的数量
                     pair_qty = min(sell_qty, buy_trade['shares'])
                     
                     # 计算盈亏
                     gross_pnl = (sell_price - buy_price) * pair_qty
                     
-                    # 正确分摊交易成本
-                    allocated_buy_cost = buy_cost * (pair_qty / buy_trade['shares'])
-                    allocated_sell_cost = sell_cost * (pair_qty / trade['shares'])
+                    # 正确分摊交易成本 - 添加除零保护
+                    allocated_buy_cost = buy_cost * (pair_qty / buy_trade['shares']) if buy_trade['shares'] > 0 else 0
+                    allocated_sell_cost = sell_cost * (pair_qty / trade['shares']) if trade['shares'] > 0 else 0
                     net_pnl = gross_pnl - allocated_buy_cost - allocated_sell_cost
-                    return_pct = ((sell_price - buy_price) / buy_price) * 100
+                    
+                    # 修复除零错误
+                    return_pct = ((sell_price - buy_price) / buy_price) * 100 if buy_price > 0 else 0
                     
                     pairs.append({
                         'symbol': symbol,
@@ -365,6 +485,7 @@ class EnhancedBacktestService:
                     # 如果买入交易完全配对，移除
                     if buy_trade['shares'] == 0:
                         positions[symbol].pop(0)
+        
         print(f"\n=== 交易配对调试信息 ===")
         print(f"生成的配对数量: {len(pairs)}")
         
@@ -421,6 +542,9 @@ class EnhancedBacktestService:
         """
         trades = []
         
+        # 获取当前日期
+        current_date = price_data.name if price_data.name is not None else pd.Timestamp.now().date()
+        
         # 添加调试信息
         if signals:
             logger.debug(f"[Trade]处理 {len(signals)} 个信号, 当前现金: {portfolio['cash']:.2f}")
@@ -444,16 +568,37 @@ class EnhancedBacktestService:
                 
                 # 计算交易数量
                 if action == 'buy':
-                    # 根据信号强度和可用资金计算买入数量
-                    available_cash = portfolio['cash']
-                    position_value = available_cash * strength * self.config.max_position_size
-                    shares = int(position_value / current_price / 100) * 100  # 按手交易
+                    # 设置最小信号强度阈值
+                    min_signal_strength = 0.3  # 至少30%的信号强度才交易
                     
-                    if shares > 0:
+                    if strength >= min_signal_strength:
+                        available_cash = portfolio['cash']
+                        position_value = available_cash * strength * self.config.max_position_size
+                        
+                        # 添加调试信息
+                        print(f"🔍 买入调试 - 股票: {symbol}")
+                        print(f"   可用资金: {available_cash:.2f}")
+                        print(f"   信号强度: {strength}")
+                        print(f"   最大仓位: {self.config.max_position_size}")
+                        print(f"   仓位价值: {position_value:.2f}")
+                        print(f"   当前价格: {current_price:.2f}")
+                        
+                        # 理论股数，转为100股为单位的手数
+                        theoretical_shares = position_value / current_price  # 10,917.03股
+                        shares = int(theoretical_shares / 100) * 100  # 10,900股
+                        print(f"   计算股数: {shares}")
+                        # 如果计算结果为0，设置最小交易单位（1手）
+                        if shares == 0:
+                            shares = 100  # 1手 = 100股
+                            print(f"   尝试采用最小交易单位: {shares}")
+
+                        # 第二步：计算交易金额和手续费
                         trade_amount = shares * current_price
                         trading_cost = self._calculate_trading_costs(trade_amount, current_price, 'buy')
-                        
+
+                        # 第三步：检查资金是否充足
                         if available_cash >= trade_amount + trading_cost:
+                            # 资金充足，创建交易
                             trade = {
                                 'symbol': symbol,
                                 'action': 'buy',
@@ -461,11 +606,13 @@ class EnhancedBacktestService:
                                 'price': current_price,
                                 'amount': trade_amount,
                                 'trading_cost': trading_cost,
-                                'timestamp': price_data.name,
+                                'timestamp': current_date,
                                 'signal_strength': strength
                             }
                             trades.append(trade)
-                
+                            print(f"   ✅ 创建交易记录 - 股数: {shares}, 金额: {trade_amount:.2f}")
+                        else:
+                            print(f"   ❌ 资金不足 - 需要: {trade_amount + trading_cost:.2f}, 可用: {available_cash:.2f}")
                 elif action == 'sell':
                     # 卖出现有持仓
                     if symbol in portfolio['positions']:
@@ -483,7 +630,7 @@ class EnhancedBacktestService:
                                 'price': current_price,
                                 'amount': trade_amount,
                                 'trading_cost': trading_cost,
-                                'timestamp': price_data.name,
+                                'timestamp': current_date,  # 修复：使用正确的时间戳
                                 'signal_strength': strength
                             }
                             trades.append(trade)
@@ -556,7 +703,6 @@ class EnhancedBacktestService:
             total_value += position_value
         
         return total_value
-    # 其他辅助方法...
     def _initialize_portfolio(self) -> Dict:
         return {
             'cash': self.config.initial_capital,

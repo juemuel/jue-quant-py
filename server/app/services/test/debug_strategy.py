@@ -11,6 +11,8 @@ from app.services.strategy.strategy_service import generate_ma_crossover_signal_
 from app.services.strategy.strategy_service import generate_unified_signals
 from app.services.events.event_service import MarketEvent, EventType, EventSeverity
 from datetime import datetime as dt
+from core.progress_tracker import create_progress_tracker
+from common.debug_utils import debug_event_provider
 import datetime  # 修改这行：导入完整的datetime模块
 import pandas as pd
 from core.logger import logger
@@ -18,7 +20,7 @@ from core.logger import logger
 import openpyxl
 # =========== 公用方法 ===========
 def get_and_preprocess_stock_data(source="akshare", code="000001", market="SH", 
-                                 start_date="20240301", end_date="20241201", page_size=1000):
+                                 start_date="20240101", end_date="20241201", page_size=1000, enable_logs=False):
     """
     获取并预处理股票数据的通用方法
     返回: (success: bool, df: DataFrame, message: str)
@@ -40,7 +42,14 @@ def get_and_preprocess_stock_data(source="akshare", code="000001", market="SH",
         return False, None, "没有获取到实际数据"
     
     df = pd.DataFrame(data_list)
-    
+    if(enable_logs == True):
+        print("\n=== 原始数据检查 ===")
+        print(f"数据源: {source}, 股票代码: {code}, 数据行数: {len(df)}")
+        print(f"列名: {df.columns.tolist()}")
+        if len(df) > 0:
+            print("\n第一行原始数据:")
+            print(df.iloc[0].to_dict())
+        print("=== 原始数据检查结束 ===\n")
     # 3. 检查必要列
     required_columns = ['收盘价', '日期']
     missing_columns = [col for col in required_columns if col not in df.columns]
@@ -180,92 +189,195 @@ def create_mock_events_data(df=None, event_count=20):
     创建模拟事件数据用于测试
     
     Args:
-        start_date: 开始日期，格式 "YYYYMMDD"
-        end_date: 结束日期，格式 "YYYYMMDD"
+        df: DataFrame，包含股票数据，用于确定时间范围
         event_count: 要生成的事件数量
+        
+    Returns:
+        dict: {
+            'success': bool,
+            'data': list[MarketEvent] | None,
+            'message': str
+        }
     """
     import random
     
-    if df is None or df.empty:
-        # 如果没有提供DataFrame，使用默认日期范围
-        start_dt = datetime.datetime(2024, 1, 1)
-        end_dt = datetime.datetime(2024, 12, 1)
-    else:
-        # 从DataFrame中提取日期范围
-        if '日期' in df.columns:
-            dates = pd.to_datetime(df['日期'])
-            start_dt = dates.min().to_pydatetime()
-            end_dt = dates.max().to_pydatetime()
-        else:
-            # 如果没有日期列，使用默认范围
+    try:
+        # 确定时间范围
+        if df is None or df.empty:
+            # 如果没有提供DataFrame，使用默认日期范围
             start_dt = datetime.datetime(2024, 1, 1)
             end_dt = datetime.datetime(2024, 12, 1)
-    
-    # 计算日期范围
-    date_range = (end_dt - start_dt).days
-    if date_range <= 0:
-        date_range = 365  # 默认一年范围
-    
-    mock_events = []
-    
-    # 定义事件模板
-    # 修改事件模板，增加更多样化的数据
-    event_templates = [
-        {
-            "type": EventType.NEWS,
-            "titles": ["重大合作协议签署", "新产品发布会成功举办", "业绩大幅增长", "获得重要奖项"],
-            "sentiment_range": (0.6, 0.9),  # 提高正面情感范围
-            "severity": EventSeverity.HIGH   # 提高严重程度
-        },
-        {
-            "type": EventType.NEWS,
-            "titles": ["监管调查启动", "重大违规事件", "业绩大幅下滑", "高管离职风波"],
-            "sentiment_range": (-0.9, -0.6),  # 提高负面情感范围
-            "severity": EventSeverity.HIGH     # 提高严重程度
-        },
-        {
-            "type": EventType.EARNINGS,
-            "titles": ["即将发布季度财报", "年度业绩预告", "中期业绩说明会", "投资者关系活动"],
-            "sentiment_range": (-0.3, 0.7),   # 扩大情感范围
-            "severity": EventSeverity.MEDIUM
+            debug_event_provider("使用默认时间范围", {
+                'start_date': start_dt.strftime('%Y-%m-%d'),
+                'end_date': end_dt.strftime('%Y-%m-%d'),
+                'reason': 'DataFrame为空或未提供'
+            })
+        else:
+            # 从DataFrame中提取日期范围
+            if '日期' in df.columns:
+                dates = pd.to_datetime(df['日期'])
+                start_dt = dates.min().to_pydatetime()
+                end_dt = dates.max().to_pydatetime()
+                debug_event_provider(f"从股票数据提取时间范围: {start_dt.strftime('%Y-%m-%d')} ~ {end_dt.strftime('%Y-%m-%d')}", {
+                    'start_date': start_dt.strftime('%Y-%m-%d'),
+                    'end_date': end_dt.strftime('%Y-%m-%d'),
+                    'data_rows': len(df)
+                })
+            else:
+                # 如果没有日期列，使用默认范围
+                start_dt = datetime.datetime(2024, 1, 1)
+                end_dt = datetime.datetime(2024, 12, 1)
+                debug_event_provider("DataFrame中无日期列，使用默认时间范围", {
+                    'start_date': start_dt.strftime('%Y-%m-%d'),
+                    'end_date': end_dt.strftime('%Y-%m-%d'),
+                    'available_columns': list(df.columns) if df is not None else []
+                })
+        
+        # 计算日期范围
+        date_range = (end_dt - start_dt).days
+        if date_range <= 0:
+            date_range = 365  # 默认一年范围
+            debug_event_provider("日期范围无效，使用默认365天", {
+                'original_range': (end_dt - start_dt).days,
+                'adjusted_range': date_range
+            })
+        
+        # 验证事件数量
+        if event_count <= 0:
+            error_msg = f"事件数量必须大于0，当前值: {event_count}"
+            debug_event_provider(error_msg, {'event_count': event_count}, "ERROR")
+            return {
+                'success': False,
+                'data': None,
+                'message': error_msg
+            }
+        
+        debug_event_provider(f"开始生成事件，参数确认", {
+            'event_count': event_count,
+            'date_range_days': date_range,
+            'start_date': start_dt.strftime('%Y-%m-%d'),
+            'end_date': end_dt.strftime('%Y-%m-%d')
+        })
+        
+        # 事件模板定义
+        event_templates = [
+            {
+                "type": EventType.NEWS,
+                "titles": ["重大合作协议签署", "新产品发布会成功举办", "业绩大幅增长", "获得重要奖项"],
+                "sentiment_range": (0.6, 0.9),  # 正面情感范围
+                "severity": EventSeverity.HIGH
+            },
+            {
+                "type": EventType.NEWS,
+                "titles": ["监管调查启动", "重大违规事件", "业绩大幅下滑", "高管离职风波"],
+                "sentiment_range": (-0.9, -0.6),  # 负面情感范围
+                "severity": EventSeverity.HIGH
+            },
+            {
+                "type": EventType.EARNINGS,
+                "titles": ["即将发布季度财报", "年度业绩预告", "中期业绩说明会", "投资者关系活动"],
+                "sentiment_range": (-0.3, 0.7),   # 中性到正面情感范围
+                "severity": EventSeverity.MEDIUM
+            }
+        ]
+        
+        debug_event_provider(f"使用 {len(event_templates)} 个事件模板生成数据")
+        # 初始化事件列表
+        mock_events = []
+        # 生成指定数量的事件
+        for i in range(event_count):
+            # 随机选择事件模板
+            template = random.choice(event_templates)
+            
+            # 随机生成日期
+            random_days = random.randint(0, date_range)
+            event_date = start_dt + datetime.timedelta(days=random_days)
+            
+            # 随机选择标题和情感分数
+            title = random.choice(template["titles"])
+            sentiment_min, sentiment_max = template["sentiment_range"]
+            sentiment_score = random.uniform(sentiment_min, sentiment_max)
+            
+            # 创建事件
+            event = MarketEvent(
+                event_id=f"event_{i+1:03d}",
+                event_type=template["type"],
+                symbol="000001",
+                timestamp=event_date,
+                title=title,
+                content=f"{title}的详细内容描述",
+                severity=template["severity"],
+                sentiment_score=sentiment_score,
+                keywords=title.split(),
+                source="模拟数据源",
+                metadata={"event_index": i+1, "template_type": template["type"].value}
+            )
+            
+            mock_events.append(event)
+        
+        # 按时间排序
+        mock_events.sort(key=lambda x: x.timestamp)
+        
+        # 统计生成的事件
+        event_types = {}
+        sentiment_stats = {'positive': 0, 'negative': 0, 'neutral': 0}
+        severity_stats = {}
+        
+        for event in mock_events:
+            # 统计事件类型
+            event_type = event.event_type.value
+            event_types[event_type] = event_types.get(event_type, 0) + 1
+            
+            # 统计情感分布
+            if event.sentiment_score > 0.2:
+                sentiment_stats['positive'] += 1
+            elif event.sentiment_score < -0.2:
+                sentiment_stats['negative'] += 1
+            else:
+                sentiment_stats['neutral'] += 1
+            
+            # 统计严重程度
+            severity = event.severity.value
+            severity_stats[severity] = severity_stats.get(severity, 0) + 1
+        
+        debug_event_provider(f"成功生成 {len(mock_events)} 个事件", {
+            'event_count': len(mock_events),
+            'time_range': {
+                'start': mock_events[0].timestamp.strftime('%Y-%m-%d'),
+                'end': mock_events[-1].timestamp.strftime('%Y-%m-%d')
+            },
+            'statistics': {
+                'event_types': event_types,
+                'sentiment_distribution': sentiment_stats,
+                'severity_distribution': severity_stats
+            }
+        })
+        
+        # 显示前几个事件的详细信息
+        debug_event_provider("前5个事件详情:")
+        for i, event in enumerate(mock_events[:5]):
+            debug_event_provider(f"事件 {i+1}: {event.title}", {
+                'event_id': event.event_id,
+                'type': event.event_type.value,
+                'sentiment': round(event.sentiment_score, 3),
+                'severity': event.severity.value,
+                'timestamp': event.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+            })
+        
+        return {
+            'success': True,
+            'data': mock_events,
+            'message': f"成功生成 {len(mock_events)} 个模拟事件，时间范围: {mock_events[0].timestamp.strftime('%Y-%m-%d')} 到 {mock_events[-1].timestamp.strftime('%Y-%m-%d')}"
         }
-    ]
-    
-    # 生成指定数量的事件
-    for i in range(event_count):
-        # 随机选择事件模板
-        template = random.choice(event_templates)
         
-        # 随机生成日期
-        random_days = random.randint(0, date_range)
-        event_date = start_dt + datetime.timedelta(days=random_days)
-        
-        # 随机选择标题和情感分数
-        title = random.choice(template["titles"])
-        sentiment_min, sentiment_max = template["sentiment_range"]
-        sentiment_score = random.uniform(sentiment_min, sentiment_max)
-        
-        # 创建事件
-        event = MarketEvent(
-            event_id=f"event_{i+1:03d}",
-            event_type=template["type"],
-            symbol="000001",
-            timestamp=event_date,
-            title=title,
-            content=f"{title}的详细内容描述",
-            severity=template["severity"],
-            sentiment_score=sentiment_score,
-            keywords=title.split(),
-            source="模拟数据源",
-            metadata={"event_index": i+1, "template_type": template["type"].value}
-        )
-        
-        mock_events.append(event)
-    
-    # 按时间排序
-    mock_events.sort(key=lambda x: x.timestamp)
-    
-    return mock_events
+    except Exception as e:
+        error_msg = f"生成模拟事件数据时发生错误: {str(e)}"
+        debug_event_provider(error_msg, level="ERROR")
+        return {
+            'success': False,
+            'data': None,
+            'message': error_msg
+        }
 # ============ 基础单信号生成(使用strategy_service中的单一信号的生成函数) ============
 # MA使用简单的金叉死叉判断,固定使用MA5和MA20
 # RSI固定阈值超卖30,超买70,触及就生成
@@ -382,29 +494,41 @@ def debug_unified_signals():
     """
     调试统一信号生成器
     """
-    print("=== 开始调试统一信号生成器 ===")
+    # 创建调试日志管理器
+    debug_progress = create_progress_tracker("调试统一信号生成功能")
+    debug_progress.start_session("调试统一信号生成功能", "测试数据信号和事件信号生成")
     
     try:
-        # 1. 获取和预处理数据
-        print("\n1. 获取和预处理股票数据...")
+        # 1. 数据获取
+        debug_progress.log_step_start("数据获取", "获取和预处理股票数据")
         success, df, message = get_and_preprocess_stock_data()
         if not success:
-            print(f"❌ 数据准备失败: {message}")
+            debug_progress.log_step_error("数据获取失败", message)
             return
-        print(f"✓ {message}")
-        
-        # 2. 创建模拟事件数据
-        print("\n2. 创建模拟事件数据...")
-        dates = pd.to_datetime(df['日期'])
-        start_dt = dates.min().to_pydatetime()
-        end_dt = dates.max().to_pydatetime()
-        print(f"股票数据时间范围: {start_dt} ~ {end_dt}")
-        events_data = create_mock_events_data(
+        debug_progress.log_step_success("数据获取", f"获取 {len(df)} 行数据", {
+            'data_rows': len(df),
+            'date_range': f"{df['日期'].min()} ~ {df['日期'].max()}"
+        })
+        # 2. 事件获取
+        debug_progress.log_step_start("事件获取", "创建模拟事件数据")
+        events_result = create_mock_events_data(
             df,
             event_count=300
         )
-        print(f"✓ 创建了 {len(events_data)} 个模拟事件")
-        print(f"✓ 事件时间范围: {events_data[0].timestamp.strftime('%Y-%m-%d')} 到 {events_data[-1].timestamp.strftime('%Y-%m-%d')}")
+        # 检查事件生成结果
+        if not events_result['success']:
+            debug_progress.log_step_error("事件获取", events_result['message'])
+            return
+        events_data = events_result['data']
+        debug_progress.log_step_success("事件获取", events_result['message'], {
+            'events_generated': len(events_data),
+            'time_range': {
+                'start': events_data[0].timestamp.strftime('%Y-%m-%d'),
+                'end': events_data[-1].timestamp.strftime('%Y-%m-%d')
+            }
+        })
+        
+        
         # 3. 配置信号生成参数
         print("\n3. 配置信号生成参数...")
         
@@ -412,7 +536,7 @@ def debug_unified_signals():
         data_signal_config = {
             'ma_crossover': {
                 'enable': True,
-                'use_parameterized': False,   # False固定参数，与debug_basic_strategy_flow一致；True参数化,支持adaptive自适应，filter过滤参数配置；
+                'use_parameterized': True,   # False固定参数，与debug_basic_strategy_flow一致；True参数化,支持adaptive自适应，filter过滤参数配置；
                 'short_period': 5,           # 与debug_basic_strategy_flow相同
                 'long_period': 20,           # 与debug_basic_strategy_flow相同
                 'adaptive': True,            # 启用自适应周期适配（需要use_parameterized为True）
@@ -425,7 +549,7 @@ def debug_unified_signals():
             },
             'rsi': {
                 'enable': True,
-                'use_parameterized': False,   # False固定参数，与debug_basic_strategy_flow一致；True参数化,支持adaptive自适应，filter过滤参数配置；
+                'use_parameterized': True,   # False固定参数，与debug_basic_strategy_flow一致；True参数化,支持adaptive自适应，filter过滤参数配置；
                 'period': 14,                # 与debug_basic_strategy_flow相同
                 'oversold': 30,              # 与debug_basic_strategy_flow相同
                 'overbought': 70,            # 与debug_basic_strategy_flow相同
@@ -538,8 +662,7 @@ def debug_unified_signals():
             print(f"❌ Excel导出失败: {e}")
             import traceback
             traceback.print_exc()
-        print("\n=== 统一信号生成器调试完成 ===")
-        
+        debug_progress.end_session("调试完成")
     except Exception as e:
         logger.error(f"统一信号调试过程中发生错误: {e}")
         print(f"\n❌ 错误: {e}")

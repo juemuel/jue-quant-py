@@ -133,7 +133,16 @@ def adaptive_ma_crossover_rule_with_params(context: TechnicalSignalContext,
     # 金叉买入
     if short_ma > long_ma and short_ma_prev <= long_ma_prev:
         generation_details.append(f"触发金叉条件: 当前{short_ma:.2f}>{long_ma:.2f} 且 前期{short_ma_prev:.2f}<={long_ma_prev:.2f}")
-        strength = min((short_ma - long_ma) / long_ma, 1.0)
+        # 修复：使用更敏感的强度计算公式
+        price_diff_ratio = abs(short_ma - long_ma) / long_ma
+        if price_diff_ratio < 0.01:  # 差距小于1%
+            strength = 0.3
+        elif price_diff_ratio < 0.02:  # 差距小于2%
+            strength = 0.5
+        elif price_diff_ratio < 0.05:  # 差距小于5%
+            strength = 0.7
+        else:  # 差距大于5%
+            strength = 1.0
         signal = {
             'symbol': context.symbol,
             'rule_name': rule_name,
@@ -158,7 +167,16 @@ def adaptive_ma_crossover_rule_with_params(context: TechnicalSignalContext,
     # 死叉卖出
     elif short_ma < long_ma and short_ma_prev >= long_ma_prev:
         generation_details.append(f"触发死叉条件: 当前{short_ma:.2f}<{long_ma:.2f} 且 前期{short_ma_prev:.2f}>={long_ma_prev:.2f}")
-        strength = min((long_ma - short_ma) / long_ma, 1.0)
+        # 修复：使用更敏感的强度计算公式
+        price_diff_ratio = abs(short_ma - long_ma) / long_ma
+        if price_diff_ratio < 0.01:  # 差距小于1%
+            strength = 0.3
+        elif price_diff_ratio < 0.02:  # 差距小于2%
+            strength = 0.5
+        elif price_diff_ratio < 0.05:  # 差距小于5%
+            strength = 0.7
+        else:  # 差距大于5%
+            strength = 1.0
         signal = {
             'symbol': context.symbol,
             'rule_name': rule_name,
@@ -313,7 +331,24 @@ def adaptive_rsi_rule_with_params(context: TechnicalSignalContext,
         return None
     
     signal = None
-    
+    # 使用分段函数计算强度
+    if rsi <= oversold:
+        # 超卖程度越深，强度越高
+        if rsi <= 20:  # 极度超卖
+            strength = 1.0
+        elif rsi <= 25:  # 严重超卖
+            strength = 0.8
+        else:  # 轻度超卖
+            strength = 0.5
+            
+    elif rsi >= overbought:
+        # 超买程度越深，强度越高
+        if rsi >= 80:  # 极度超买
+            strength = 1.0
+        elif rsi >= 75:  # 严重超买
+            strength = 0.8
+        else:  # 轻度超买
+            strength = 0.5
     # 生成基础信号
     if rsi <= oversold:
         generation_details.append(f"触发超卖条件: {rsi:.1f} <= {oversold}")
@@ -321,7 +356,8 @@ def adaptive_rsi_rule_with_params(context: TechnicalSignalContext,
             'symbol': context.symbol,
             'rule_name': rule_name,
             'signal': 1,
-            'strength': min((oversold - rsi) / oversold, 1.0),
+            # 'strength': min((oversold - rsi) / oversold, 1.0),
+            'strength': strength,
             'generation_details': '; '.join(generation_details),
             'reason': f'RSI{period}超卖信号 (RSI:{rsi:.1f}<={oversold})',  # 使用实际的period而不是base_period
             'timestamp': context.timestamp,
@@ -344,7 +380,8 @@ def adaptive_rsi_rule_with_params(context: TechnicalSignalContext,
             'symbol': context.symbol,
             'rule_name': rule_name,
             'signal': -1,
-            'strength': min((rsi - overbought) / (100 - overbought), 1.0),
+            # 'strength': min((rsi - overbought) / (100 - overbought), 1.0),
+            'strength': strength,
             'generation_details': '; '.join(generation_details),
             'reason': f'RSI{period}超买信号 (RSI:{rsi:.1f}>={overbought})',  # 使用实际的period而不是base_period
             'timestamp': context.timestamp,

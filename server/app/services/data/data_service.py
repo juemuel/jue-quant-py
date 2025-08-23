@@ -6,6 +6,7 @@ import numpy as np
 import datetime
 from typing import List, Dict, Optional
 from app.services.data.processor.data_processor import DataProcessor
+from common.debug_utils import debug_data_provider
 
 
 # 一、数据服务层-市场行情数据
@@ -24,7 +25,7 @@ def get_all_stocks(source="akshare", market=None, fields=None, page=None, page_s
     :param page_size: 每页数量
     :return: 分页后的股票列表
     """
-    logger.info(f"[Bridge]获取所有股票 from {source}")
+    debug_data_provider("获取所有股票", {"source": source, "market": market, "fields": fields, "page": page, "page_size": page_size})
     try:
         # 1.调用接口
         data_provider = get_data_provider(source)
@@ -41,8 +42,11 @@ def get_all_stocks(source="akshare", market=None, fields=None, page=None, page_s
             df_processed = result["data"]
             available_fields = result["available_fields"]
             
-            logger.info(f"[Service]处理的列名: {df_processed.columns.tolist()}")
-            logger.info(f"[Service]可用标准字段: {available_fields}")
+            # 数据处理后的结果
+            debug_data_provider("处理后数据", {
+                "处理后列名": df_processed.columns.tolist(),
+                "可用标准字段": available_fields
+            })
         except ValueError as e:
             logger.error(f"[Service]字段处理失败: {e}")
             return {"status": 'error', "message": str(e)}
@@ -68,7 +72,7 @@ def get_concept_stocks(source="akshare", fields=None, page=None, page_size=20):
     :param page_size: 每页数量
     :return: 概念板块列表
     """
-    logger.info(f"[Service]获取概念板块列表 from {source}")
+    debug_data_provider("获取概念板块列表", {"source": source, "fields": fields, "page": page, "page_size": page_size})
     try:
         # 0.调用数据提供者获取原始数据
         data_provider = get_data_provider(source)
@@ -87,8 +91,10 @@ def get_concept_stocks(source="akshare", fields=None, page=None, page_size=20):
             df_processed = result["data"]
             available_fields = result["available_fields"]
             
-            logger.info(f"[Service]处理后的列名: {df_processed.columns.tolist()}")
-            logger.info(f"[Service]可用标准字段: {available_fields}")
+            debug_data_provider("处理后数据", {
+                "处理后列名": df_processed.columns.tolist(),
+                "可用标准字段": available_fields
+            })
             
         except ValueError as e:
             logger.error(f"[Service]字段处理失败: {e}")
@@ -119,8 +125,11 @@ def get_concept_constituent_stocks(source="akshare", concept_identifier=None, fi
     :param page_size: 每页数量
     :return: 概念板块成分股列表
     """
-    logger.info(f"[Service]获取概念板块成分股 from {source}, concept_identifier={concept_identifier}")
     
+    debug_data_provider("获取概念板块成分股", {
+        "source": source, 
+        "concept_identifier": concept_identifier
+    })
     if not concept_identifier:
         return {"status": "error", "message": "概念板块标识符不能为空"}
     
@@ -158,8 +167,10 @@ def get_concept_constituent_stocks(source="akshare", concept_identifier=None, fi
             df_processed = result["data"]
             available_fields = result["available_fields"]
             
-            logger.info(f"[Service]处理后的列名: {df_processed.columns.tolist()}")
-            logger.info(f"[Service]可用标准字段: {available_fields}")
+            debug_data_provider("处理后数据", {
+                "处理后列名": df_processed.columns.tolist(),
+                "可用标准字段": available_fields
+            })
             
         except ValueError as e:
             logger.error(f"[Service]字段处理失败: {e}")
@@ -194,7 +205,17 @@ def get_stock_history(source="akshare", code="000001", market="SH", start_date=N
     :param page_size: 每页数量
     :return: 标准化格式的股票历史数据
     """
-    logger.info(f"[Data]获取股票历史行情数据 {code}.{market} from {source}")
+    debug_data_provider("获取股票历史记录", {
+        "source": source, 
+        "code": code, 
+        "market": market, 
+        "start_date": start_date, 
+        "end_date": end_date, 
+        "fields": fields, 
+        "page": page, 
+        "page_size": page_size
+    })
+
     try:
         # 1.调用接口
         data_provider = get_data_provider(source)
@@ -214,8 +235,10 @@ def get_stock_history(source="akshare", code="000001", market="SH", start_date=N
             df_processed = result["data"]
             available_fields = result["available_fields"]
             
-            logger.info(f"[Service]处理后的列名: {df_processed.columns.tolist()}")
-            logger.info(f"[Service]可用标准字段: {available_fields}")
+            debug_data_provider("处理后数据", {
+                "处理后列名": df_processed.columns.tolist(),
+                "可用标准字段": available_fields
+            })
             
         except ValueError as e:
             logger.error(f"[Service]字段处理失败: {e}")
@@ -247,7 +270,7 @@ def get_realtime_quotes(source="akshare", codes=None, fields=None, page=None, pa
     :param page_size: 每页数量
     :return: 实时行情数据
     """
-    logger.info(f"[Service]获取实时行情 from {source}")
+    debug_data_provider("获取实时行情", {"source": source, "codes": codes})
     try:
         # 1.调用数据提供者获取原始数据
         data_provider = get_data_provider(source)
@@ -266,8 +289,10 @@ def get_realtime_quotes(source="akshare", codes=None, fields=None, page=None, pa
             df_processed = result["data"]
             available_fields = result["available_fields"]
             
-            logger.info(f"[Service]处理后的列名: {df_processed.columns.tolist()}")
-            logger.info(f"[Service]可用标准字段: {available_fields}")
+            debug_data_provider("处理后数据", {
+                "处理后列名": df_processed.columns.tolist(),
+                "可用标准字段": available_fields
+            })
             
         except ValueError as e:
             logger.error(f"[Service]字段处理失败: {e}")
@@ -312,8 +337,12 @@ def get_macro_data(source="akshare", indicator="GDP", start_date=None, end_date=
     :param page_size: 每页数量
     :return: 标准化后的宏观经济数据
     """
-    logger.info(f"[Service]获取宏观经济数据 {indicator} from {source}")
-    
+    debug_data_provider("获取宏观经济数据", {
+        "indicator": indicator,
+        "source": source,
+        "start_date": start_date,
+        "end_date": end_date
+    })
     try:
         # 1.调用接口
         data_provider = get_data_provider(source)
@@ -342,8 +371,10 @@ def get_macro_data(source="akshare", indicator="GDP", start_date=None, end_date=
             df_processed = result["data"]
             available_fields = result["available_fields"]
             
-            logger.info(f"[Service]处理后的列名: {df_processed.columns.tolist()}")
-            logger.info(f"[Service]可用标准字段: {available_fields}")
+            debug_data_provider("处理后数据", {
+                "处理后列名": df_processed.columns.tolist(),
+                "可用标准字段": available_fields
+            })
             
         except ValueError as e:
             logger.error(f"[Service]字段处理失败: {e}")
@@ -380,7 +411,12 @@ def get_financial_report(source="akshare", code="000001", market=None, report_ty
     :param page_size: 每页数量
     :return: 财务数据
     """
-    logger.info(f"[Data]获取财务数据 {code} from {source}")
+    debug_data_provider("获取财务数据", {
+        "code": code,
+        "source": source,
+        "market": market,
+        "report_type": report_type
+    })
     try:
         # 处理股票代码格式
         if market:
@@ -449,7 +485,11 @@ def get_stock_fund_flow(source="akshare", code="000001", indicator="今日", fie
     :param page_size: 每页数量
     :return: 股票资金流向数据
     """
-    logger.info(f"[Data]获取资金流向数据 {code} from {source}, indicator={indicator}")
+    debug_data_provider("获取资金流向数据", {
+        "code": code,
+        "source": source,
+        "indicator": indicator
+    })
     try:
         # 1.调用接口
         data_provider = get_data_provider(source)
@@ -495,8 +535,12 @@ def get_dragon_tiger_list(source="akshare", start_date=None, end_date=None, fiel
     """
     获取龙虎榜数据
     """
-    logger.info(f"[Data]获取龙虎榜数据 from {source}, date range={start_date} to {end_date}, fields={fields}")
-
+    debug_data_provider("获取龙虎榜数据", {
+        "source": source,
+        "start_date": start_date,
+        "end_date": end_date,
+        "fields": fields
+    })
     try:
         # 1.调用接口
         data_provider = get_data_provider(source)
@@ -541,7 +585,12 @@ def get_news_sentiment(source="akshare", symbol=None, start_date=None, end_date=
     """
     获取新闻情感数据
     """
-    logger.info(f"[Data]获取新闻情感数据 {symbol} from {source}")
+    debug_data_provider("获取新闻情感数据", {
+        "symbol": symbol,
+        "source": source,
+        "start_date": start_date,
+        "end_date": end_date
+    })
     try:
         # 1.调用接口
         data_provider = get_data_provider(source)
