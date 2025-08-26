@@ -63,9 +63,18 @@ class IndicatorCalculator:
     def _format_result(self, df: pd.DataFrame, message: str, 
                       indicator_columns: List[str] = None) -> Dict:
         """格式化返回结果"""
+        logger.debug(f"[IndicatorCalculator]开始格式化结果，DataFrame形状: {df.shape}, 指标列: {indicator_columns}")
+        
         try:
+            # 第一步：数据清理
+            logger.debug(f"[IndicatorCalculator]步骤1: 开始清理数据")
             cleaned_data = clean_numeric_data(df)
+            logger.debug(f"[IndicatorCalculator]步骤1: 数据清理完成，形状: {cleaned_data.shape}")
+            
+            # 第二步：转换为字典
+            logger.debug(f"[IndicatorCalculator]步骤2: 开始转换为字典")
             data_dict = safe_convert_to_dict(cleaned_data)
+            logger.debug(f"[IndicatorCalculator]步骤2: 字典转换完成，记录数: {len(data_dict)}")
             
             result = {
                 "status": "success",
@@ -74,26 +83,116 @@ class IndicatorCalculator:
                 "indicators": indicator_columns or []
             }
             
-            # 添加统计信息
+            # 第三步：添加统计信息
             if indicator_columns:
+                logger.debug(f"[IndicatorCalculator]步骤3: 开始计算统计信息，指标数量: {len(indicator_columns)}")
                 stats = {}
-                for col in indicator_columns:
+                
+                for i, col in enumerate(indicator_columns):
+                    logger.debug(f"[IndicatorCalculator]步骤3.{i+1}: 处理指标 {col}")
+                    
                     if col in df.columns:
-                        series = df[col].dropna()
-                        if len(series) > 0:
-                            stats[col] = {
-                                'count': len(series),
-                                'mean': float(series.mean()),
-                                'std': float(series.std()),
-                                'min': float(series.min()),
-                                'max': float(series.max())
-                            }
+                        try:
+                            # 详细调试每个步骤
+                            logger.debug(f"[IndicatorCalculator]步骤3.{i+1}.1: 获取列 {col} 的原始数据")
+                            series_data = df[col]
+                            logger.debug(f"[IndicatorCalculator]步骤3.{i+1}.1: 原始数据类型: {type(series_data)}, 长度: {len(series_data)}")
+                            
+                            logger.debug(f"[IndicatorCalculator]步骤3.{i+1}.2: 转换为数值类型")
+                            numeric_series = pd.to_numeric(series_data, errors='coerce')
+                            logger.debug(f"[IndicatorCalculator]步骤3.{i+1}.2: 数值转换完成，类型: {type(numeric_series)}")
+                            
+                            logger.debug(f"[IndicatorCalculator]步骤3.{i+1}.3: 删除NaN值")
+                            clean_series = numeric_series.dropna()
+                            logger.debug(f"[IndicatorCalculator]步骤3.{i+1}.3: 清理完成，有效数据量: {len(clean_series)}")
+                            
+                            if len(clean_series) > 0:
+                                logger.debug(f"[IndicatorCalculator]步骤3.{i+1}.4: 开始计算统计值")
+                                
+                                # 逐个计算统计值并记录
+                                logger.debug(f"[IndicatorCalculator]步骤3.{i+1}.4.1: 计算均值")
+                                mean_val = float(clean_series.mean())
+                                logger.debug(f"[IndicatorCalculator]步骤3.{i+1}.4.1: 均值 = {mean_val}")
+                                
+                                logger.debug(f"[IndicatorCalculator]步骤3.{i+1}.4.2: 计算标准差")
+                                std_val = float(clean_series.std()) if len(clean_series) > 1 else 0.0
+                                logger.debug(f"[IndicatorCalculator]步骤3.{i+1}.4.2: 标准差 = {std_val}")
+                                
+                                logger.debug(f"[IndicatorCalculator]步骤3.{i+1}.4.3: 计算最小值")
+                                min_val = float(clean_series.min())
+                                logger.debug(f"[IndicatorCalculator]步骤3.{i+1}.4.3: 最小值 = {min_val}")
+                                
+                                logger.debug(f"[IndicatorCalculator]步骤3.{i+1}.4.4: 计算最大值")
+                                max_val = float(clean_series.max())
+                                logger.debug(f"[IndicatorCalculator]步骤3.{i+1}.4.4: 最大值 = {max_val}")
+                                
+                                # 检查是否为有效数值
+                                logger.debug(f"[IndicatorCalculator]步骤3.{i+1}.5: 检查数值有效性")
+                                finite_check = [np.isfinite(val) for val in [mean_val, std_val, min_val, max_val]]
+                                logger.debug(f"[IndicatorCalculator]步骤3.{i+1}.5: 有效性检查结果: {finite_check}")
+                                
+                                if all(finite_check):
+                                    logger.debug(f"[IndicatorCalculator]步骤3.{i+1}.6: 构建统计字典")
+                                    stats[col] = {
+                                        'count': int(len(clean_series)),
+                                        'mean': mean_val,
+                                        'std': std_val,
+                                        'min': min_val,
+                                        'max': max_val
+                                    }
+                                    logger.debug(f"[IndicatorCalculator]步骤3.{i+1}.6: 统计字典构建成功")
+                                else:
+                                    logger.warning(f"[IndicatorCalculator]指标 {col} 包含无效数值，跳过统计。有效性: {finite_check}")
+                            else:
+                                logger.debug(f"[IndicatorCalculator]步骤3.{i+1}: 指标 {col} 无有效数据，跳过")
+                                
+                        except Exception as e:
+                            logger.error(f"[IndicatorCalculator]计算 {col} 统计信息失败: {e}")
+                            logger.error(f"[IndicatorCalculator]异常详情: {type(e).__name__}: {str(e)}")
+                            import traceback
+                            logger.error(f"[IndicatorCalculator]异常堆栈: {traceback.format_exc()}")
+                            # 跳过有问题的列，继续处理其他列
+                            continue
+                    else:
+                        logger.warning(f"[IndicatorCalculator]指标列 {col} 不存在于DataFrame中")
+                        
+                logger.debug(f"[IndicatorCalculator]步骤3: 统计信息计算完成，统计项数量: {len(stats)}")
                 result['statistics'] = stats
             
+            logger.debug(f"[IndicatorCalculator]格式化结果成功完成")
             return result
+            
         except Exception as e:
             logger.error(f"[IndicatorCalculator]格式化结果失败: {e}")
-            return {"status": "error", "message": f"格式化失败: {e}"}
+            logger.error(f"[IndicatorCalculator]异常详情: {type(e).__name__}: {str(e)}")
+            import traceback
+            logger.error(f"[IndicatorCalculator]异常堆栈: {traceback.format_exc()}")
+            
+            # 返回基本结果，不包含统计信息
+            try:
+                logger.debug(f"[IndicatorCalculator]尝试备用格式化方案")
+                cleaned_data = clean_numeric_data(df)
+                data_dict = safe_convert_to_dict(cleaned_data)
+                logger.debug(f"[IndicatorCalculator]备用格式化成功")
+                return {
+                    "status": "success",
+                    "data": data_dict,
+                    "message": message,
+                    "indicators": indicator_columns or [],
+                    "statistics": {}
+                }
+            except Exception as fallback_e:
+                logger.error(f"[IndicatorCalculator]备用格式化也失败: {fallback_e}")
+                logger.error(f"[IndicatorCalculator]备用异常详情: {type(fallback_e).__name__}: {str(fallback_e)}")
+                import traceback
+                logger.error(f"[IndicatorCalculator]备用异常堆栈: {traceback.format_exc()}")
+                return {
+                    "status": "error", 
+                    "message": f"格式化失败: {e}",
+                    "data": [],
+                    "indicators": [],
+                    "statistics": {}
+                }
     
     @validate_dataframe
     def calculate_moving_averages(self, df: pd.DataFrame, 
@@ -232,13 +331,15 @@ class IndicatorCalculator:
                 rsi_column = f'RSI{period}'
                 result_df[rsi_column] = 100 - (100 / (1 + rs))
                 
-                # 处理边界情况
-                mask_loss_zero = (loss == 0)
-                mask_gain_positive = (gain > 0) & mask_loss_zero
-                mask_gain_zero = (gain == 0) & mask_loss_zero
+                # 处理边界情况 - 修复布尔掩码使用方式
+                # 使用 .where() 方法替代 .loc[] 索引
+                loss_zero_mask = (loss == 0)
+                gain_positive_mask = (gain > 0) & loss_zero_mask
+                gain_zero_mask = (gain == 0) & loss_zero_mask
                 
-                result_df.loc[mask_gain_positive, rsi_column] = 100.0
-                result_df.loc[mask_gain_zero, rsi_column] = 50.0
+                # 安全的赋值方式
+                result_df[rsi_column] = result_df[rsi_column].where(~gain_positive_mask, 100.0)
+                result_df[rsi_column] = result_df[rsi_column].where(~gain_zero_mask, 50.0)
                 
                 result_df[rsi_column] = pd.to_numeric(result_df[rsi_column], errors='coerce')
                 rsi_columns.append(rsi_column)
@@ -536,28 +637,19 @@ class IndicatorCalculator:
 # 支持传入策略规则，保持向后兼容
 def calculate_indicators_for_strategy(df: pd.DataFrame, 
                                     config: Dict) -> Tuple[Dict, pd.DataFrame]:
-    """
-    为策略服务提供的便捷指标计算函数
-    :param df: 价格数据
-    :param config: 指标配置
-    :return: (indicators_dict, result_dataframe)
-    """
+    """为策略服务提供的便捷指标计算函数"""
     calculator = IndicatorCalculator()
     
     indicators = {}
-    
     
     # MA指标
     if config.get('ma_crossover', {}).get('enable', True):
         ma_config = config.get('ma_crossover', {})
         
-        # 根据是否开启自适应来决定计算哪些MA周期
         if ma_config.get('adaptive', False):
-            # 自适应模式：计算多个周期的MA以支持动态选择
-            periods = [3, 5, 10, 20, 30]  # 提供更多选择
+            periods = [3, 5, 10, 20, 30]
             logger.debug(f"[Indicator]使用MA自适应模式，计算周期: {periods}")
         else:
-            # 固定模式：只计算配置的周期
             periods = [ma_config.get('short_period', 5), ma_config.get('long_period', 20)]
             logger.debug(f"[Indicator]使用固定MA周期: {periods}")
             
@@ -567,24 +659,26 @@ def calculate_indicators_for_strategy(df: pd.DataFrame,
             ma_df = pd.DataFrame(ma_result['data'])
             for col in ma_df.columns:
                 if col.startswith('SMA'):
-                    indicators[col.replace('SMA', 'MA')] = ma_df[col]
+                    # 修复：返回 pandas Series 而不是 list
+                    try:
+                        indicators[col.replace('SMA', 'MA')] = pd.to_numeric(ma_df[col], errors='coerce').fillna(0)
+                    except Exception as e:
+                        logger.warning(f"[Indicator]MA指标 {col} 转换失败: {e}")
+                        indicators[col.replace('SMA', 'MA')] = pd.Series(dtype=float)
     
     # RSI指标
     if config.get('rsi', {}).get('enable', True):
         rsi_config = config.get('rsi', {})
         
-        # 根据是否开启自适应来决定计算哪些RSI周期
         if rsi_config.get('adaptive', False):
-            # 自适应模式：计算多个周期的RSI以支持动态选择
             base_period = rsi_config.get('period', 14)
             periods = [
-                max(base_period - 7, 7),   # 最短周期
-                max(base_period - 4, 10),  # 短周期
-                base_period,               # 基础周期
-                min(base_period + 7, 28),  # 长周期
-                min(base_period + 14, 35)  # 最长周期
+                max(base_period - 7, 7),
+                max(base_period - 4, 10),
+                base_period,
+                min(base_period + 7, 28),
+                min(base_period + 14, 35)
             ]
-            # 去重并排序
             periods = sorted(list(set(periods)))
             logger.debug(f"[Indicator]使用RSI自适应模式，计算周期: {periods}")
             
@@ -595,14 +689,18 @@ def calculate_indicators_for_strategy(df: pd.DataFrame,
                 for period in periods:
                     rsi_column = f'RSI{period}'
                     if rsi_column in rsi_df.columns:
-                        indicators[rsi_column] = rsi_df[rsi_column]
+                        # 修复：返回 pandas Series 而不是 list
+                        try:
+                            indicators[rsi_column] = pd.to_numeric(rsi_df[rsi_column], errors='coerce').fillna(50)
+                        except Exception as e:
+                            logger.warning(f"[Indicator]RSI指标 {rsi_column} 转换失败: {e}")
+                            indicators[rsi_column] = pd.Series(dtype=float)
                 
-                # 为了向后兼容，也保留原来的键名（使用基础周期）
+                # 为了向后兼容，也保留原来的键名
                 base_rsi_column = f'RSI{base_period}'
                 if base_rsi_column in indicators:
                     indicators['RSI'] = indicators[base_rsi_column]
         else:
-            # 固定模式：只计算配置的周期
             period = rsi_config.get('period', 14)
             logger.debug(f"[Indicator]使用固定RSI周期: {period}")
             
@@ -612,8 +710,13 @@ def calculate_indicators_for_strategy(df: pd.DataFrame,
                 rsi_df = pd.DataFrame(rsi_result['data'])
                 rsi_column = f'RSI{period}'
                 if rsi_column in rsi_df.columns:
-                    indicators[rsi_column] = rsi_df[rsi_column]
-                    # 为了向后兼容，也保留原来的键名
-                    indicators['RSI'] = indicators[rsi_column]
+                    # 修复：返回 pandas Series 而不是 list
+                    try:
+                        indicators[rsi_column] = pd.to_numeric(rsi_df[rsi_column], errors='coerce').fillna(50)
+                        indicators['RSI'] = indicators[rsi_column]  # 向后兼容
+                    except Exception as e:
+                        logger.warning(f"[Indicator]RSI指标 {rsi_column} 转换失败: {e}")
+                        indicators[rsi_column] = pd.Series(dtype=float)
+                        indicators['RSI'] = pd.Series(dtype=float)
     
     return indicators, df

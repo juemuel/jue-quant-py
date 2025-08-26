@@ -17,7 +17,7 @@ class TechnicalSignalContext:
 # ============ 信号生成规则 ============
 # 动态均线交叉规则（已完成）
 # 固定参数
-def adaptive_ma_crossover_rule(context: TechnicalSignalContext) -> Optional[Dict]:
+def default_ma_crossover_rule(context: TechnicalSignalContext) -> Optional[Dict]:
     """自适应均线交叉规则（固定参数版本）"""
     return adaptive_ma_crossover_rule_with_params(context, volatility_threshold=0.3, adaptive=False)
 # 动态参数：创建规则（携带基础参数和过滤配置）->传入
@@ -212,7 +212,7 @@ def adaptive_ma_crossover_rule_with_params(context: TechnicalSignalContext,
 
 # RSI规则（已完成）
 # 固定参数
-def adaptive_rsi_rule(context: TechnicalSignalContext) -> Optional[Dict]:
+def default_rsi_rule(context: TechnicalSignalContext) -> Optional[Dict]:
     """自适应RSI规则（固定参数版本）"""
     return adaptive_rsi_rule_with_params(context, oversold=30, overbought=70)
 # 动态参数：创建规则（携带基础参数和过滤配置）->传入
@@ -501,16 +501,16 @@ def support_resistance_breakout_rule(context: TechnicalSignalContext) -> Optiona
 # 创建规则
 
 # 设置中文名称
-adaptive_ma_crossover_rule.chinese_name = '自适应均线交叉规则(固定参数)'
-adaptive_rsi_rule.chinese_name = '自适应RSI规则(固定参数)'
 trend_strength_filter_rule.chinese_name = '趋势强度过滤规则(固定参数)'
 support_resistance_breakout_rule.chinese_name = '支撑阻力突破规则(固定参数)'
-adaptive_ma_crossover_rule_with_params.chinese_name = '自适应均线交叉规则(参数化)'
+default_rsi_rule.chinese_name = '默认周期RSI规则(固定参数)'
 adaptive_rsi_rule_with_params.chinese_name = '自适应RSI规则(参数化)'
+default_ma_crossover_rule.chinese_name = '自适应均线交叉规则(固定参数)'
+adaptive_ma_crossover_rule_with_params.chinese_name = '自适应均线交叉规则(参数化)'
 # 更新规则名称字典，区分固定和参数化版本
 RULE_NAMES = {
-    'adaptive_ma_crossover_rule': '自适应均线交叉规则(固定参数)',
-    'adaptive_rsi_rule': '自适应RSI规则(固定参数)', 
+    'default_ma_crossover_rule': '自适应均线交叉规则(固定参数)',
+    'default_rsi_rule': '自适应RSI规则(固定参数)', 
     'trend_strength_filter_rule': '趋势强度过滤规则(固定参数)',
     'support_resistance_breakout_rule': '支撑阻力突破规则(固定参数)',
     'adaptive_ma_crossover_rule_with_params': '自适应均线交叉规则(参数化)',

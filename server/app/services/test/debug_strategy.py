@@ -581,15 +581,40 @@ def debug_unified_signals():
         }
          # 配置完成，记录详细信息
         config_details = {
-            'data_signals_count': len([k for k, v in data_signal_config.items() if v.get('enable', False)]),
-            'event_signals_count': len([k for k, v in event_signal_config.items() if v.get('enable', False)]),
-            'ma_config': f"MA交叉({data_signal_config['ma_crossover']['short_period']},{data_signal_config['ma_crossover']['long_period']})",
-            'rsi_config': f"RSI({data_signal_config['rsi']['period']})",
-            'news_threshold': event_signal_config.get('news_sentiment', {}).get('sentiment_threshold', '默认'),
-            'earnings_mode': "参数化" if event_signal_config.get('earnings', {}).get('use_parameterized', False) else "固定参数",
-            'keyword_strength': event_signal_config.get('keyword_trigger', {}).get('strength', '默认')
+            '数据信号规则': {
+                '规则数量': len([k for k, v in data_signal_config.items() if v.get('enable', False)]),
+                '启用规则': [k for k, v in data_signal_config.items() if v.get('enable', False)],
+                '参数配置': [
+                    f"{rule}(参数化:{config.get('use_parameterized', False)}, 自适应:{config.get('adaptive', False)}, 过滤:{bool([f for f, f_config in config.get('filter_config', {}).items() if f_config.get('enable', False)])})"
+                    for rule, config in data_signal_config.items() if config.get('enable', False)
+                ],
+                '详细参数': {
+                    'MA交叉': f"短周期:{data_signal_config['ma_crossover']['short_period']}, 长周期:{data_signal_config['ma_crossover']['long_period']}",
+                    'RSI': f"周期:{data_signal_config['rsi']['period']}, 超卖:{data_signal_config['rsi']['oversold']}, 超买:{data_signal_config['rsi']['overbought']}"
+                }
+            },
+            '事件信号规则': {
+                '规则数量': len([k for k, v in event_signal_config.items() if v.get('enable', False)]),
+                '启用规则': [k for k, v in event_signal_config.items() if v.get('enable', False)],
+                '参数配置': [
+                    f"{rule}(参数化:{config.get('use_parameterized', False)})"
+                    for rule, config in event_signal_config.items() if config.get('enable', False)
+                ],
+                '详细参数': {
+                    '新闻情感': f"阈值:{event_signal_config.get('news_sentiment', {}).get('sentiment_threshold', '默认')}",
+                    '财报模式': "参数化" if event_signal_config.get('earnings', {}).get('use_parameterized', False) else "固定参数",
+                    '关键词强度': event_signal_config.get('keyword_trigger', {}).get('strength', '默认')
+                }
+            },
+            '过滤器配置': {
+                '数据信号过滤器': [
+                    f"{rule}({', '.join([f for f, f_config in config.get('filter_config', {}).items() if f_config.get('enable', False)])})"
+                    for rule, config in data_signal_config.items()
+                    if config.get('enable', False) and config.get('filter_config') and 
+                    any(f_config.get('enable', False) for f_config in config.get('filter_config', {}).values())
+                ] or ["无启用的过滤器"]
+            }
         }
-        
         logger.step_success("信号配置", "信号配置创建完成", config_details)
 
         # 4. 生成统一信号

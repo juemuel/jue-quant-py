@@ -7,8 +7,8 @@ from datetime import datetime
 # 导入数据驱动相关
 from .signal_rules.data_signal_rules import (
     TechnicalSignalContext,
-    adaptive_ma_crossover_rule,
-    adaptive_rsi_rule,
+    default_ma_crossover_rule,
+    default_rsi_rule,
     trend_strength_filter_rule,
     support_resistance_breakout_rule
 )
@@ -432,8 +432,8 @@ class UnifiedSignalManager:
     def create_default_data_generator(self):
         """创建默认数据信号生成器"""
         # 信号规则
-        self.data_generator.add_signal_rule(adaptive_ma_crossover_rule)
-        self.data_generator.add_signal_rule(adaptive_rsi_rule)
+        self.data_generator.add_signal_rule(default_ma_crossover_rule)
+        self.data_generator.add_signal_rule(default_rsi_rule)
         # 过滤规则
         self.data_generator.add_filter_rule(trend_strength_filter_rule)
         return self.data_generator

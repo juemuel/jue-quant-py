@@ -7,9 +7,9 @@ from typing import List, Dict, Optional  # 添加 Optional 导入
 import datetime
 from app.services.analytics import analytic_service
 from app.services.signals.signal_rules.data_signal_rules import (
-    adaptive_ma_crossover_rule,
+    default_ma_crossover_rule,
     create_parameterized_ma_rule, 
-    adaptive_rsi_rule,
+    default_rsi_rule,
     create_parameterized_rsi_rule,
     trend_strength_filter_rule,
     support_resistance_breakout_rule
@@ -30,7 +30,7 @@ from app.services.signals.signal_service import DataSignalGenerator, EventSignal
 from app.services.events.event_service import MarketEvent, EventType, EventSeverity 
 from app.services.analytics.indicator_service import IndicatorCalculator, calculate_indicators_for_strategy
 from datetime import datetime as dt
-import datetime  # 修改这行：导入完整的datetime模块
+import datetime
 import pandas as pd
 from core.logger import logger
 from common.debug_utils import create_debug_logger, debug_strategy, debug_backtest, debug_data_provider, debug_event_provider, debug_signals
@@ -285,8 +285,8 @@ def generate_data_driven_signals(df, signal_rules=None, filter_rules=None):
         # 添加默认规则
         if signal_rules is None:
             signal_rules = [
-                adaptive_ma_crossover_rule,
-                adaptive_rsi_rule,
+                default_ma_crossover_rule,
+                default_rsi_rule,
                 trend_strength_filter_rule,
                 support_resistance_breakout_rule
             ]
@@ -689,7 +689,6 @@ def generate_unified_signals(price_data: pd.DataFrame,
                            event_signal_config: Optional[Dict] = None,
                            events_data: Optional[List[Dict]] = None,
                            filter_rules: Optional[List] = None) -> Dict:    
-    logger = create_debug_logger("生成中", "strategy")
     try:
         unified_manager = UnifiedSignalManager()
         #  默认数据信号配置，每个规则都有独立的过滤配置
@@ -719,14 +718,16 @@ def generate_unified_signals(price_data: pd.DataFrame,
                     }
                 }
             }
-        debug_signals("数据信号配置", {
+        debug_signals("数据信号配置参数", {
             "规则数量": len(data_signal_config),
             "参数配置": [f"{rule}(参数化:{config.get('use_parameterized', False)}, 自适应:{config.get('adaptive', False)}, 过滤:{bool([f for f, f_config in config.get('filter_config', {}).items() if f_config.get('enable', False)])})"
                             for rule, config in data_signal_config.items()],
-            "自定义": [(f" - 参数:{', '.join([f'{k}:{v}' for k, v in config.items() if k not in ['use_parameterized', 'filter_config', 'enable', 'adaptive']])}" 
-                 if config.get('use_parameterized', False) and config.get('adaptive', False) and 
-                    any(k not in ['use_parameterized', 'filter_config', 'enable', 'adaptive'] for k in config.keys()) 
-                 else "")],
+            "自定义参数": [
+                f"{rule} - 参数:{', '.join([f'{k}:{v}' for k, v in config.items() if k not in ['use_parameterized', 'filter_config', 'enable', 'adaptive']])}"
+                for rule, config in data_signal_config.items()
+                if config.get('use_parameterized', False) and config.get('adaptive', False) and 
+                   any(k not in ['use_parameterized', 'filter_config', 'enable', 'adaptive'] for k in config.keys())
+            ] or ["无自定义参数"],
             "过滤器详情": [
                 f"{rule}({', '.join([f for f, f_config in config.get('filter_config', {}).items() if f_config.get('enable', False)])})"
                 for rule, config in data_signal_config.items() 
@@ -744,18 +745,18 @@ def generate_unified_signals(price_data: pd.DataFrame,
             if data_signal_config.get('rsi', {}).get('enable', True):
                 rsi_config = data_signal_config.get('rsi', {})
                 if rsi_config.get('use_parameterized', False):
-                    rsi_rule = create_parameterized_rsi_rule(
+                    config_rsi_rule = create_parameterized_rsi_rule(
                         period=rsi_config.get('period', 14),
                         oversold=rsi_config.get('oversold', 30),
                         overbought=rsi_config.get('overbought', 70),
                         adaptive=rsi_config.get('adaptive', False),  # 新增自适应参数
                         filter_config=rsi_config.get('filter_config')  # 传入独立的过滤配置
                     )
-                    data_generator.add_signal_rule(rsi_rule)
-                    debug_signals(f"配置参数化RSI规则: 周期={rsi_config.get('period', 14)}, 超卖={rsi_config.get('oversold', 30)}, 超买={rsi_config.get('overbought', 70)}")
+                    data_generator.add_signal_rule(config_rsi_rule)
+                    debug_signals(f"配置参数化RSI规则: 周期={rsi_config.get('period', 14)}, 超卖={rsi_config.get('oversold', 30)}, 超买={rsi_config.get('overbought', 70)}{', 参数将会自适应' if rsi_config.get('adaptive', False) else ''}")
                 else:
-                    data_generator.add_signal_rule(adaptive_rsi_rule)
-                    debug_signals("配置自适应RSI规则")
+                    data_generator.add_signal_rule(default_rsi_rule)
+                    debug_signals("配置默认的RSI规则")
                 enabled_data_rules.append('rsi')
 
             
@@ -763,22 +764,22 @@ def generate_unified_signals(price_data: pd.DataFrame,
             if data_signal_config.get('ma_crossover', {}).get('enable', True):
                 ma_config = data_signal_config.get('ma_crossover', {})
                 if ma_config.get('use_parameterized', False):
-                    ma_rule = create_parameterized_ma_rule(
+                    config_ma_rule = create_parameterized_ma_rule(
                         short_period=ma_config.get('short_period', 5),
                         long_period=ma_config.get('long_period', 20),
                         adaptive=ma_config.get('adaptive', False),
                         filter_config=ma_config.get('filter_config')  # 传入独立的过滤配置
                     )
-                    data_generator.add_signal_rule(ma_rule)
-                    debug_signals(f"配置参数化MA规则: 短周期={ma_config.get('short_period', 5)}, 长周期={ma_config.get('long_period', 20)}")
+                    data_generator.add_signal_rule(config_ma_rule)
+                    debug_signals(f"配置参数化MA规则: 短周期={ma_config.get('short_period', 5)}, 长周期={ma_config.get('long_period', 20)}{', 参数将会自适应' if ma_config.get('adaptive', False) else ''}")
                 else:
-                    data_generator.add_signal_rule(adaptive_ma_crossover_rule)
-                    debug_signals("配置自适应MA规则")
+                    data_generator.add_signal_rule(default_ma_crossover_rule)
+                    debug_signals("配置默认的MA规则")
                 enabled_data_rules.append('ma_crossover')
             
             # 检查是否有启用的规则
             if not enabled_data_rules:
-                debug_logger.warning("[Strategy]所有数据驱动信号规则都已禁用，跳过数据信号生成")
+                logger.warning("[Strategy]所有数据驱动信号规则都已禁用，跳过数据信号生成")
                 data_signals = []
             else:
                 debug_signals("启用的数据信号规则", {
@@ -789,10 +790,12 @@ def generate_unified_signals(price_data: pd.DataFrame,
                 indicators = {}
                 try:
                     indicators, _ = calculate_indicators_for_strategy(price_data, data_signal_config)
+                    # 修复：先获取字典的键，再进行切片
+                    indicator_keys = list(indicators.keys())
                     debug_signals("技术指标计算", {
                         "指标数量": len(indicators),
-                        "指标列表": list(indicators.keys()),
-                        "数据行数": len(price_data) if not price_data.empty else 0
+                        "指标列表": ", ".join(indicator_keys[:20]) + (f"... 还有{len(indicators)-20}个" if len(indicators) > 20 else ""),
+                        "数据行数": len(price_data)
                     })
                 except Exception as e:
                     logger.error(f"[Strategy]指标计算失败: {e}")
@@ -800,10 +803,27 @@ def generate_unified_signals(price_data: pd.DataFrame,
                 
                 # 生成信号
                 data_signals = data_generator.generate_signals(price_data, indicators)
+                
+                # 修复：正确处理字典格式的信号
+                signal_type_distribution = {}
+                if data_signals:
+                    for signal in data_signals:
+                        # signal 是字典，使用 'signal' 键获取信号类型
+                        signal_type = signal.get('signal', 'unknown')
+                        signal_type_distribution[signal_type] = signal_type_distribution.get(signal_type, 0) + 1
+                
+                # 修复：正确获取时间范围
+                time_range = "无信号"
+                if data_signals:
+                    # 从字典中获取时间戳
+                    first_timestamp = data_signals[0].get('timestamp', 'N/A')
+                    last_timestamp = data_signals[-1].get('timestamp', 'N/A')
+                    time_range = f"{first_timestamp} ~ {last_timestamp}"
+                
                 debug_signals("数据信号生成结果", {
                     "信号数量": len(data_signals),
-                    "信号类型分布": {signal.signal_type.value: 1 for signal in data_signals} if data_signals else {},
-                    "时间范围": f"{data_signals[0].timestamp} ~ {data_signals[-1].timestamp}" if data_signals else "无信号"
+                    "信号类型分布": signal_type_distribution,
+                    "时间范围": time_range
                 })
             
         except Exception as e:
@@ -2444,7 +2464,7 @@ def create_optimized_portfolio():
         {
             'name': 'Data_Driven_Signals',
             'function': generate_data_driven_signals,
-            'params': {'signal_rules': ['adaptive_ma_crossover_rule']},
+            'params': {'signal_rules': ['default_ma_crossover_rule']},
             'weight': 0.3  # 30%权重
         }
     ]
@@ -2466,7 +2486,7 @@ def create_hybrid_portfolio():
             'name': 'Technical_Signals',
             'function': lambda df: generate_unified_signals(
                 price_data=df,
-                data_signal_config={'rules': ['adaptive_ma_crossover_rule', 'adaptive_rsi_rule']}
+                data_signal_config={'rules': ['default_ma_crossover_rule', 'default_rsi_rule']}
             ),
             'params': {},
             'weight': 0.6
@@ -2647,7 +2667,7 @@ def complete_strategy_workflow():
         events_data=events_data,
         initial_capital=100000,
         data_signal_config={
-            'rules': ['adaptive_ma_crossover_rule'],
+            'rules': ['default_ma_crossover_rule'],
             'params': ma_optimization['data']['best_params']
         },
         event_signal_config={

@@ -166,50 +166,29 @@ def debug_decorator(category: str, message: str = "", level: str = "INFO"):
         return wrapper
     return decorator
 
-# 简化的debug_data_provider函数
 def debug_data_provider(message: str, data: Any = None, level: str = "INFO"):
-    """数据提供者调试打印"""
+    DebugPrinter.show_status_once('data_provider', DebugConfig.DEBUG_DATA_PROVIDER)
     if DebugConfig.DEBUG_DATA_PROVIDER:
-        # 只在第一次调用时显示状态
-        if not DebugPrinter._status_shown['data_provider']:
-            status_msg = ColoredConsole.colorize("📊 DATA_PROVIDER调试日志已开启", 'green')
-            print(status_msg)
-            DebugPrinter._status_shown['data_provider'] = True
-        
-        # 显示调试信息
         DebugPrinter.print_if_enabled('data_provider', message, data, level)
-    else:
-        # 只在第一次调用时显示关闭状态
-        if not DebugPrinter._status_shown['data_provider']:
-            status_msg = ColoredConsole.colorize("📊 DATA_PROVIDER调试日志已关闭", 'dim')
-            print(status_msg)
-            DebugPrinter._status_shown['data_provider'] = True
-
-# 同时修改其他调试函数保持一致性
+def debug_event_provider(message: str, data: Any = None, level: str = "INFO"):
+    DebugPrinter.show_status_once('event_provider', DebugConfig.DEBUG_EVENT_PROVIDER)
+    if DebugConfig.DEBUG_EVENT_PROVIDER:
+        DebugPrinter.print_if_enabled('event_provider', message, data, level)
 def debug_strategy(message: str, data: Any = None, level: str = "INFO"):
-    """策略调试打印"""
     DebugPrinter.show_status_once('strategy', DebugConfig.DEBUG_STRATEGY)
     if DebugConfig.DEBUG_STRATEGY:
         DebugPrinter.print_if_enabled('strategy', message, data, level)
 
 def debug_backtest(message: str, data: Any = None, level: str = "INFO"):
-    """回测调试打印"""
     DebugPrinter.show_status_once('backtest', DebugConfig.DEBUG_BACKTEST)
     if DebugConfig.DEBUG_BACKTEST:
         DebugPrinter.print_if_enabled('backtest', message, data, level)
 
 def debug_signals(message: str, data: Any = None, level: str = "INFO"):
-    """信号调试打印"""
     DebugPrinter.show_status_once('signals', DebugConfig.DEBUG_SIGNALS)
     if DebugConfig.DEBUG_SIGNALS:
         DebugPrinter.print_if_enabled('signals', message, data, level)
 
-# 在文件末尾添加新的调试函数
-def debug_event_provider(message: str, data: Any = None, level: str = "INFO"):
-    """事件提供者调试打印"""
-    DebugPrinter.show_status_once('event_provider', DebugConfig.DEBUG_EVENT_PROVIDER)
-    if DebugConfig.DEBUG_EVENT_PROVIDER:
-        DebugPrinter.print_if_enabled('event_provider', message, data, level)
 
 class UnifiedDebugLogger:
     """统一调试日志管理器 - 整合 debug_utils 和 progress_tracker"""
