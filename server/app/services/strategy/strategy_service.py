@@ -33,6 +33,8 @@ from datetime import datetime as dt
 import datetime  # 修改这行：导入完整的datetime模块
 import pandas as pd
 from core.logger import logger
+from common.debug_utils import create_debug_logger, debug_strategy, debug_backtest, debug_data_provider, debug_event_provider, debug_signals
+
 # 添加Excel导出功能
 import openpyxl
 # ============ 价格数据信号 ============
@@ -686,10 +688,8 @@ def generate_unified_signals(price_data: pd.DataFrame,
                            data_signal_config: Optional[Dict] = None,
                            event_signal_config: Optional[Dict] = None,
                            events_data: Optional[List[Dict]] = None,
-                           filter_rules: Optional[List] = None) -> Dict:
-    # 默认数据信号配置，每个规则都有独立的过滤配置
-    logger.info("[Strategy]开始统一信号生成")
-    
+                           filter_rules: Optional[List] = None) -> Dict:    
+    logger = create_debug_logger("生成中", "strategy")
     try:
         unified_manager = UnifiedSignalManager()
         #  默认数据信号配置，每个规则都有独立的过滤配置
@@ -719,7 +719,20 @@ def generate_unified_signals(price_data: pd.DataFrame,
                     }
                 }
             }
-
+        debug_signals("数据信号配置", {
+            "规则数量": len(data_signal_config),
+            "参数配置": [f"{rule}(参数化:{config.get('use_parameterized', False)}, 自适应:{config.get('adaptive', False)}, 过滤:{bool([f for f, f_config in config.get('filter_config', {}).items() if f_config.get('enable', False)])})"
+                            for rule, config in data_signal_config.items()],
+            "自定义": [(f" - 参数:{', '.join([f'{k}:{v}' for k, v in config.items() if k not in ['use_parameterized', 'filter_config', 'enable', 'adaptive']])}" 
+                 if config.get('use_parameterized', False) and config.get('adaptive', False) and 
+                    any(k not in ['use_parameterized', 'filter_config', 'enable', 'adaptive'] for k in config.keys()) 
+                 else "")],
+            "过滤器详情": [
+                f"{rule}({', '.join([f for f, f_config in config.get('filter_config', {}).items() if f_config.get('enable', False)])})"
+                for rule, config in data_signal_config.items() 
+                if config.get('filter_config') and any(f_config.get('enable', False) for f_config in config.get('filter_config', {}).values())
+            ] or ["无启用的过滤器"]
+        })
         # 生成数据驱动信号
         data_signals = []
         try:
@@ -739,8 +752,10 @@ def generate_unified_signals(price_data: pd.DataFrame,
                         filter_config=rsi_config.get('filter_config')  # 传入独立的过滤配置
                     )
                     data_generator.add_signal_rule(rsi_rule)
+                    debug_signals(f"配置参数化RSI规则: 周期={rsi_config.get('period', 14)}, 超卖={rsi_config.get('oversold', 30)}, 超买={rsi_config.get('overbought', 70)}")
                 else:
                     data_generator.add_signal_rule(adaptive_rsi_rule)
+                    debug_signals("配置自适应RSI规则")
                 enabled_data_rules.append('rsi')
 
             
@@ -755,29 +770,41 @@ def generate_unified_signals(price_data: pd.DataFrame,
                         filter_config=ma_config.get('filter_config')  # 传入独立的过滤配置
                     )
                     data_generator.add_signal_rule(ma_rule)
+                    debug_signals(f"配置参数化MA规则: 短周期={ma_config.get('short_period', 5)}, 长周期={ma_config.get('long_period', 20)}")
                 else:
                     data_generator.add_signal_rule(adaptive_ma_crossover_rule)
+                    debug_signals("配置自适应MA规则")
                 enabled_data_rules.append('ma_crossover')
             
             # 检查是否有启用的规则
             if not enabled_data_rules:
-                logger.warning("[Strategy]所有数据驱动信号规则都已禁用，跳过数据信号生成")
+                debug_logger.warning("[Strategy]所有数据驱动信号规则都已禁用，跳过数据信号生成")
                 data_signals = []
             else:
-                logger.debug(f"[Strategy]启用的数据信号规则: {enabled_data_rules}")
+                debug_signals("启用的数据信号规则", {
+                    "规则列表": enabled_data_rules,
+                })
                 
                 # 计算技术指标
                 indicators = {}
                 try:
                     indicators, _ = calculate_indicators_for_strategy(price_data, data_signal_config)
-                    logger.debug(f"[Strategy]指标计算完成，共计算{len(indicators)}个指标: {list(indicators.keys())}")
+                    debug_signals("技术指标计算", {
+                        "指标数量": len(indicators),
+                        "指标列表": list(indicators.keys()),
+                        "数据行数": len(price_data) if not price_data.empty else 0
+                    })
                 except Exception as e:
                     logger.error(f"[Strategy]指标计算失败: {e}")
                     indicators = {} 
                 
                 # 生成信号
                 data_signals = data_generator.generate_signals(price_data, indicators)
-                logger.info(f"[Strategy]原生数据驱动信号生成完成，信号数量: {len(data_signals)}")
+                debug_signals("数据信号生成结果", {
+                    "信号数量": len(data_signals),
+                    "信号类型分布": {signal.signal_type.value: 1 for signal in data_signals} if data_signals else {},
+                    "时间范围": f"{data_signals[0].timestamp} ~ {data_signals[-1].timestamp}" if data_signals else "无信号"
+                })
             
         except Exception as e:
             logger.error(f"[Strategy]数据驱动信号生成失败: {e}")

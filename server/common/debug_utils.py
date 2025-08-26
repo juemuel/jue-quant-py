@@ -106,11 +106,11 @@ class DebugPrinter:
             
         # 根据类别选择颜色
         color_map = {
-            'data_provider': 'dim',      # 数据提供者用浅灰色
-            'event_provider': 'dim',   # 事件提供者用黄色
-            'strategy': 'dim',          # 策略用绿色
-            'backtest': 'dim',         # 回测用黄色
-            'signals': 'dim',           # 信号用绿色
+            'data_provider': 'dim',
+            'event_provider': 'dim',
+            'strategy': 'dim',
+            'backtest': 'dim',
+            'signals': 'dim',
         }
         
         color = color_map.get(category, 'dim')
@@ -128,7 +128,15 @@ class DebugPrinter:
                     print(ColoredConsole.colorize(str(data.head()), color))
             elif isinstance(data, dict):
                 for key, value in data.items():
-                    print(ColoredConsole.colorize(f"{key}: {value}", color))
+                    if isinstance(value, list):
+                        print(ColoredConsole.colorize(f"{key}: [{len(value)}个项目]", color))
+                        if len(value) > 0:
+                            for i, item in enumerate(value[:3]):  # 只显示前3个
+                                print(ColoredConsole.colorize(f"  - {item}", color))
+                            if len(value) > 3:
+                                print(ColoredConsole.colorize(f"  ... 还有{len(value)-3}个项目", color))
+                    else:
+                        print(ColoredConsole.colorize(f"{key}: {value}", color))
             elif isinstance(data, (list, tuple)):
                 print(ColoredConsole.colorize(f"数据长度: {len(data)}", color))
                 if len(data) > 0:
@@ -158,7 +166,6 @@ def debug_decorator(category: str, message: str = "", level: str = "INFO"):
         return wrapper
     return decorator
 
-# 便捷函数
 # 简化的debug_data_provider函数
 def debug_data_provider(message: str, data: Any = None, level: str = "INFO"):
     """数据提供者调试打印"""
@@ -203,3 +210,109 @@ def debug_event_provider(message: str, data: Any = None, level: str = "INFO"):
     DebugPrinter.show_status_once('event_provider', DebugConfig.DEBUG_EVENT_PROVIDER)
     if DebugConfig.DEBUG_EVENT_PROVIDER:
         DebugPrinter.print_if_enabled('event_provider', message, data, level)
+
+class UnifiedDebugLogger:
+    """统一调试日志管理器 - 整合 debug_utils 和 progress_tracker"""
+    
+    def __init__(self, module_name: str, category: str = 'strategy'):
+        self.module_name = module_name
+        self.category = category
+        self.progress_tracker = None
+        self._session_active = False
+    
+    def start_session(self, session_name: str, description: str = ""):
+        """开始调试会话"""
+        from common.progress_tracker import create_progress_tracker
+        self.progress_tracker = create_progress_tracker(self.module_name)
+        self.progress_tracker.start_session(session_name, description)
+        self._session_active = True
+        
+        # 显示调试状态
+        DebugPrinter.show_status_once(self.category, self._is_category_enabled())
+    
+    def step_start(self, step_name: str, description: str = "", **kwargs):
+        """开始步骤"""
+        if self.progress_tracker and self._session_active:
+            self.progress_tracker.log_step_start(step_name, description, **kwargs)
+        else:
+            self.info(f"开始 {step_name}: {description}")
+    
+    def step_info(self, step_name: str, info: str = "", **kwargs):
+        """步骤信息"""
+        if self.progress_tracker and self._session_active:
+            self.progress_tracker.log_step_info(step_name, info, **kwargs)
+        else:
+            self.info(f"步骤 {step_name} 信息: {info}")
+
+    def step_success(self, step_name: str, summary: str = "", details: dict = None, **kwargs):
+        """步骤成功"""
+        if self.progress_tracker and self._session_active:
+            self.progress_tracker.log_step_success(step_name, summary, details, **kwargs)
+        else:
+            self.success(f"完成 {step_name}: {summary}")
+    
+    def step_error(self, step_name: str, error_msg: str, details: dict = None, **kwargs):
+        """步骤错误"""
+        if self.progress_tracker and self._session_active:
+            self.progress_tracker.log_step_error(step_name, error_msg, details, **kwargs)
+        else:
+            self.error(f"错误 {step_name}: {error_msg}")
+    
+    def data_analysis(self, data_name: str, data, analysis: dict = None):
+        """数据分析日志"""
+        if self.progress_tracker and self._session_active:
+            self.progress_tracker.log_data_info(data_name, data, analysis)
+        else:
+            DebugPrinter.print_if_enabled(self.category, f"数据分析: {data_name}", data)
+    
+    def performance(self, operation: str, duration: float, details: dict = None):
+        """性能日志"""
+        if self.progress_tracker and self._session_active:
+            self.progress_tracker.log_performance(operation, duration, details)
+        else:
+            self.info(f"性能: {operation} 耗时 {duration:.3f}s")
+    
+    def info(self, message: str, data=None, level: str = "INFO"):
+        """信息日志"""
+        DebugPrinter.print_if_enabled(self.category, message, data, level)
+    
+    def success(self, message: str, data=None):
+        """成功日志"""
+        self.info(f"✅ {message}", data, "INFO")
+    
+    def warning(self, message: str, data=None):
+        """警告日志"""
+        if self.progress_tracker and self._session_active:
+            self.progress_tracker.log_warning(message, {'data': data} if data else None)
+        else:
+            DebugPrinter.print_if_enabled(self.category, f"⚠️ {message}", data, "WARNING")
+    
+    def error(self, message: str, data=None):
+        """错误日志"""
+        DebugPrinter.print_if_enabled(self.category, f"❌ {message}", data, "ERROR")
+    
+    def debug(self, message: str, data=None):
+        """调试日志"""
+        self.info(f"🔍 {message}", data, "DEBUG")
+    
+    def end_session(self, summary: str = ""):
+        """结束会话"""
+        if self.progress_tracker and self._session_active:
+            self.progress_tracker.end_session(summary)
+            self._session_active = False
+    
+    def _is_category_enabled(self) -> bool:
+        """检查当前类别是否启用"""
+        category_map = {
+            'strategy': DebugConfig.DEBUG_STRATEGY,
+            'signals': DebugConfig.DEBUG_SIGNALS,
+            'event_provider': DebugConfig.DEBUG_EVENT_PROVIDER,
+            'data_provider': DebugConfig.DEBUG_DATA_PROVIDER,
+            'backtest': DebugConfig.DEBUG_BACKTEST,
+        }
+        return category_map.get(self.category, False)
+
+# 便捷创建函数
+def create_debug_logger(module_name: str, category: str = 'strategy') -> UnifiedDebugLogger:
+    """创建统一调试日志器"""
+    return UnifiedDebugLogger(module_name, category)

@@ -10,10 +10,8 @@ from app.services.analytics.indicator_service import IndicatorCalculator
 from app.services.strategy.strategy_service import generate_ma_crossover_signal_from_indicators, generate_rsi_signal_from_indicators
 from app.services.strategy.strategy_service import generate_unified_signals
 from app.services.events.event_service import MarketEvent, EventType, EventSeverity
-from datetime import datetime as dt
-from core.progress_tracker import create_progress_tracker
-from common.debug_utils import debug_event_provider
-import datetime  # 修改这行：导入完整的datetime模块
+import datetime
+from common.debug_utils import create_debug_logger, debug_strategy, debug_backtest, debug_data_provider, debug_event_provider
 import pandas as pd
 from core.logger import logger
 # 添加Excel导出功能
@@ -495,32 +493,32 @@ def debug_unified_signals():
     调试统一信号生成器
     """
     # 创建调试日志管理器
-    debug_progress = create_progress_tracker("调试统一信号生成功能")
-    debug_progress.start_session("调试统一信号生成功能", "测试数据信号和事件信号生成")
+    logger = create_debug_logger("调试统一信号生成功能", "strategy")
+    logger.start_session("调试统一信号生成功能", "测试数据信号和事件信号生成")
     
     try:
         # 1. 数据获取
-        debug_progress.log_step_start("数据获取", "获取和预处理股票数据")
+        logger.step_start("1. 数据获取", "获取和预处理股票数据")
         success, df, message = get_and_preprocess_stock_data()
         if not success:
-            debug_progress.log_step_error("数据获取失败", message)
+            logger.step_error("数据获取失败", message)
             return
-        debug_progress.log_step_success("数据获取", f"获取 {len(df)} 行数据", {
+        logger.step_success("数据获取", f"获取 {len(df)} 行数据", {
             'data_rows': len(df),
             'date_range': f"{df['日期'].min()} ~ {df['日期'].max()}"
         })
         # 2. 事件获取
-        debug_progress.log_step_start("事件获取", "创建模拟事件数据")
+        logger.step_start("2. 事件获取", "创建模拟事件数据")
         events_result = create_mock_events_data(
             df,
             event_count=300
         )
         # 检查事件生成结果
         if not events_result['success']:
-            debug_progress.log_step_error("事件获取", events_result['message'])
+            logger.step_error("事件获取", events_result['message'])
             return
         events_data = events_result['data']
-        debug_progress.log_step_success("事件获取", events_result['message'], {
+        logger.step_success("事件获取", events_result['message'], {
             'events_generated': len(events_data),
             'time_range': {
                 'start': events_data[0].timestamp.strftime('%Y-%m-%d'),
@@ -528,9 +526,8 @@ def debug_unified_signals():
             }
         })
         
-        
         # 3. 配置信号生成参数
-        print("\n3. 配置信号生成参数...")
+        logger.step_start("3. 信号配置", "创建数据信号和事件信号配置")
         
         # 数据驱动信号规则配置
         data_signal_config = {
@@ -541,7 +538,7 @@ def debug_unified_signals():
                 'long_period': 20,           # 与debug_basic_strategy_flow相同
                 'adaptive': True,            # 启用自适应周期适配（需要use_parameterized为True）
                 'filter_config': {
-                    'volatility_filter': {'enable': False, 'min_volatility': 0.3, 'max_volatility': 1},  # 禁用过滤器
+                    'volatility_filter': {'enable': True, 'min_volatility': 0.3, 'max_volatility': 1},  # 禁用过滤器
                     'volume_confirmation': {'enable': False, 'volume_multiplier': 1, 'lookback_days': 20},
                     'trend_strength_filter': {'enable': False, 'min_adx': 25},
                     'signal_strength_filter': {'enable': False, 'min_strength': 0.3}
@@ -555,7 +552,7 @@ def debug_unified_signals():
                 'overbought': 70,            # 与debug_basic_strategy_flow相同
                 'adaptive': True,            # 启用自适应周期适配（需要use_parameterized为True）
                 'filter_config': {
-                    'volume_confirmation': {'enable': False, 'volume_multiplier': 1, 'lookback_days': 20},  # 禁用过滤器
+                    'volume_confirmation': {'enable': True, 'volume_multiplier': 1, 'lookback_days': 20},  # 禁用过滤器
                     'volatility_filter': {'enable': False, 'min_volatility': 0.3, 'max_volatility': 0.5},
                     'trend_strength_filter': {'enable': False, 'min_adx': 25},
                     'signal_strength_filter': {'enable': False, 'min_strength': 0.3}
@@ -582,15 +579,21 @@ def debug_unified_signals():
                 'strength': 0.7,
             }
         }
-        print("✓ 信号配置完成")
-        print(f"  - 数据驱动信号: MA交叉({data_signal_config['ma_crossover']['short_period']},{data_signal_config['ma_crossover']['long_period']}), RSI({data_signal_config['rsi']['period']})")
-         # 安全地访问事件信号配置
-        news_threshold = event_signal_config.get('news_sentiment', {}).get('sentiment_threshold', '默认')
-        earnings_info = "参数化" if event_signal_config.get('earnings', {}).get('use_parameterized', False) else "固定参数"
-        keyword_strength = event_signal_config.get('keyword_trigger', {}).get('strength', '默认')
-        print(f"  - 事件驱动信号: 新闻情绪(阈值{news_threshold}), 财报预期({earnings_info}), 关键词触发(强度{keyword_strength})")
+         # 配置完成，记录详细信息
+        config_details = {
+            'data_signals_count': len([k for k, v in data_signal_config.items() if v.get('enable', False)]),
+            'event_signals_count': len([k for k, v in event_signal_config.items() if v.get('enable', False)]),
+            'ma_config': f"MA交叉({data_signal_config['ma_crossover']['short_period']},{data_signal_config['ma_crossover']['long_period']})",
+            'rsi_config': f"RSI({data_signal_config['rsi']['period']})",
+            'news_threshold': event_signal_config.get('news_sentiment', {}).get('sentiment_threshold', '默认'),
+            'earnings_mode': "参数化" if event_signal_config.get('earnings', {}).get('use_parameterized', False) else "固定参数",
+            'keyword_strength': event_signal_config.get('keyword_trigger', {}).get('strength', '默认')
+        }
+        
+        logger.step_success("信号配置", "信号配置创建完成", config_details)
 
-        print("\n4. 生成统一信号...")
+        # 4. 生成统一信号
+        logger.step_start("4. 信号生成", "生成统一信号")
         # 4.1 生成统一组合信号
         # unified_result = generate_unified_signals(
         #     price_data=df,
@@ -662,7 +665,7 @@ def debug_unified_signals():
             print(f"❌ Excel导出失败: {e}")
             import traceback
             traceback.print_exc()
-        debug_progress.end_session("调试完成")
+        logger.end_session("调试完成")
     except Exception as e:
         logger.error(f"统一信号调试过程中发生错误: {e}")
         print(f"\n❌ 错误: {e}")

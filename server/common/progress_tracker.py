@@ -120,7 +120,7 @@ class ProgressTracker:
             'show_progress': True,
             'show_summary': True,
             'show_errors': True,
-            'max_detail_lines': 3,  # 控制台最多显示的详细信息行数
+            'max_detail_lines': 5,  # 控制台最多显示的详细信息行数
             'show_timestamps': False,  # 是否显示时间戳
             'indent_details': True,    # 是否缩进详细信息
         }
@@ -129,9 +129,9 @@ class ProgressTracker:
         self.color_theme = {
             'session_start': {'color': 'bright_green', 'bold': True},  # 改为绿色
             'session_end': {'color': 'bright_green', 'bold': True},    # 改为绿色
-            'step_start': {'color': 'green'},                          # 改为绿色
-            'step_success': {'color': 'bright_green', 'bold': True},   # 保持绿色
-            'step_error': {'color': 'bright_red', 'bold': True},       # 保持红色（失败）
+            'step_start': {'color': 'green', 'bold': True},                          # 改为绿色
+            'step_success': {'color': 'bright_green', 'bold': False},   # 保持绿色
+            'step_error': {'color': 'bright_red', 'bold': False},       # 保持红色（失败）
             'warning': {'color': 'bright_yellow'},                     # 保持黄色（警告）
             'info': {'color': 'green'},                                # 改为绿色
             'data': {'color': 'bright_green'},                         # 改为绿色
@@ -212,6 +212,8 @@ class ProgressTracker:
     
     def log_step_success(self, step_name: str, summary: str = "", details: Dict = None, **kwargs):
         """记录步骤成功"""
+        success_time = datetime.datetime.now()
+        duration = None
         success_info = {
             'step_name': step_name,
             'summary': summary,
@@ -221,9 +223,12 @@ class ProgressTracker:
             'extra': kwargs
         }
         
-        # 更新步骤日志
+        # 查找对应的开始记录并计算耗时
         for log in self.step_logs:
             if log['step_name'] == step_name and log['status'] == 'started':
+                if 'start_time' in log:
+                    duration = (success_time - log['start_time']).total_seconds()
+                    success_info['duration'] = duration
                 log.update(success_info)
                 break
         else:
@@ -232,10 +237,16 @@ class ProgressTracker:
         self.step_status[step_name] = 'success'
         
         if self.enable_console and self.console_config.get('show_progress', True):
-            if summary:
-                self._print_with_timestamp(f"✅ {step_name}: {summary}", 'step_success')
+            # 构建显示消息，包含耗时
+            if duration is not None:
+                duration_str = f" (耗时: {duration:.3f}s)"
             else:
-                self._print_with_timestamp(f"✅ {step_name} 完成", 'step_success')
+                duration_str = ""
+                
+            if summary:
+                self._print_with_timestamp(f"✅ {step_name}: {summary}{duration_str}", 'step_success')
+            else:
+                self._print_with_timestamp(f"✅ {step_name} 完成{duration_str}", 'step_success')
             
             # 显示详细信息（限制行数）
             if details and self.console_config.get('indent_details', True):
@@ -534,7 +545,7 @@ def create_strategy_tracker(**kwargs) -> ProgressTracker:
     tracker.configure_console(
         show_progress=True,
         show_summary=True,
-        max_detail_lines=2,
+        max_detail_lines=5,
         show_timestamps=False,
         indent_details=True
     )
@@ -546,7 +557,7 @@ def create_backtest_tracker(**kwargs) -> ProgressTracker:
     tracker.configure_console(
         show_progress=True,
         show_summary=True,
-        max_detail_lines=1,
+        max_detail_lines=5,
         show_timestamps=True,
         indent_details=True
     )
