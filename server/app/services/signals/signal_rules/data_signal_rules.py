@@ -245,7 +245,7 @@ def create_parameterized_rsi_rule(period: int = 14,
     rsi_rule_with_filters.__name__ = f'rsi_rule_{period}_{oversold}_{overbought}_{adaptive}'
     
     return rsi_rule_with_filters
-    
+
 def adaptive_rsi_rule_with_params(context: TechnicalSignalContext,
                                 base_period: int = 14,
                                 oversold: float = 30,
@@ -756,3 +756,165 @@ STRICT_FILTER_RULES = [
     price_momentum_filter,
     volatility_filter
 ]
+
+
+class SignalRuleRegistry:
+    """信号规则注册表 - 统一管理所有信号规则及其所需指标"""
+    
+    def __init__(self):
+        self._rules = {}
+        self._rule_indicators = {}
+        self._rule_categories = {}
+        self._initialize_default_rules()
+    
+    def _initialize_default_rules(self):
+        """初始化默认规则"""
+        # 注册MA交叉规则
+        self.register_rule(
+            name='default_ma_crossover',
+            rule_func=default_ma_crossover_rule,
+            required_indicators=['ma_5', 'ma_20'],
+            optional_indicators=['volume', 'volatility'],
+            category='trend_following',
+            description='默认MA交叉规则(5日/20日)',
+            chinese_name='默认均线交叉规则'
+        )
+        
+        # 注册RSI规则
+        self.register_rule(
+            name='default_rsi',
+            rule_func=default_rsi_rule,
+            required_indicators=['rsi_14'],
+            optional_indicators=['volume'],
+            category='momentum',
+            description='默认RSI规则(14周期)',
+            chinese_name='默认RSI规则'
+        )
+        
+        # 注册趋势强度过滤规则
+        self.register_rule(
+            name='trend_strength_filter',
+            rule_func=trend_strength_filter_rule,
+            required_indicators=['ma_5', 'ma_20', 'ma_50'],
+            optional_indicators=['volume'],
+            category='filter',
+            description='趋势强度过滤规则',
+            chinese_name='趋势强度过滤规则'
+        )
+        
+        # 注册支撑阻力突破规则
+        self.register_rule(
+            name='support_resistance_breakout',
+            rule_func=support_resistance_breakout_rule,
+            required_indicators=['high', 'low', 'close'],
+            optional_indicators=['volume'],
+            category='breakout',
+            description='支撑阻力突破规则',
+            chinese_name='支撑阻力突破规则'
+        )
+    
+    def register_rule(self, name: str, rule_func: Callable, 
+                     required_indicators: List[str], 
+                     optional_indicators: List[str] = None,
+                     category: str = 'general',
+                     description: str = '',
+                     chinese_name: str = ''):
+        """注册信号规则"""
+        self._rules[name] = {
+            'func': rule_func,
+            'description': description,
+            'chinese_name': chinese_name or name,
+            'category': category
+        }
+        
+        self._rule_indicators[name] = {
+            'required': required_indicators,
+            'optional': optional_indicators or []
+        }
+        
+        if category not in self._rule_categories:
+            self._rule_categories[category] = []
+        self._rule_categories[category].append(name)
+    
+    def register_parameterized_rule(self, name: str, rule_creator: Callable,
+                                   params: Dict, required_indicators: List[str],
+                                   optional_indicators: List[str] = None,
+                                   category: str = 'parameterized',
+                                   description: str = '',
+                                   chinese_name: str = ''):
+        """注册参数化规则"""
+        # 创建参数化规则实例
+        rule_func = rule_creator(**params)
+        
+        # 生成唯一名称
+        param_str = '_'.join([f"{k}{v}" for k, v in params.items()])
+        full_name = f"{name}_{param_str}"
+        
+        self.register_rule(
+            name=full_name,
+            rule_func=rule_func,
+            required_indicators=required_indicators,
+            optional_indicators=optional_indicators,
+            category=category,
+            description=f"{description} (参数: {params})",
+            chinese_name=f"{chinese_name} ({param_str})"
+        )
+        
+        return full_name
+    
+    def get_rule(self, name: str) -> Optional[Dict]:
+        """获取规则信息"""
+        return self._rules.get(name)
+    
+    def get_rule_indicators(self, name: str) -> Optional[Dict]:
+        """获取规则所需指标"""
+        return self._rule_indicators.get(name)
+    
+    def get_rules_by_category(self, category: str) -> List[str]:
+        """按类别获取规则"""
+        return self._rule_categories.get(category, [])
+    
+    def get_all_required_indicators(self, rule_names: List[str]) -> List[str]:
+        """获取多个规则的所有必需指标"""
+        all_indicators = set()
+        for rule_name in rule_names:
+            indicators = self.get_rule_indicators(rule_name)
+            if indicators:
+                all_indicators.update(indicators['required'])
+        return list(all_indicators)
+    
+    def get_all_indicators(self, rule_names: List[str]) -> Dict[str, List[str]]:
+        """获取多个规则的所有指标（必需+可选）"""
+        required = set()
+        optional = set()
+        
+        for rule_name in rule_names:
+            indicators = self.get_rule_indicators(rule_name)
+            if indicators:
+                required.update(indicators['required'])
+                optional.update(indicators['optional'])
+        
+        return {
+            'required': list(required),
+            'optional': list(optional),
+            'all': list(required | optional)
+        }
+    
+    def list_all_rules(self) -> Dict[str, Dict]:
+        """列出所有规则"""
+        return self._rules.copy()
+    
+    def list_categories(self) -> List[str]:
+        """列出所有类别"""
+        return list(self._rule_categories.keys())
+    
+    def get_rule_summary(self) -> Dict:
+        """获取规则摘要信息"""
+        return {
+            'total_rules': len(self._rules),
+            'categories': {cat: len(rules) for cat, rules in self._rule_categories.items()},
+            'rules_by_category': self._rule_categories.copy()
+        }
+
+# 创建全局注册表实例
+rule_registry = SignalRuleRegistry()

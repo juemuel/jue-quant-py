@@ -4,7 +4,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
 
 from app.services.strategy.backtest_service import EnhancedBacktestService, BacktestConfig, TradingCost
 from app.services.test.debug_strategy import debug_unified_signals, get_and_preprocess_stock_data
-from app.services.strategy.strategy_service import generate_unified_signals
+from app.services.strategy.strategy_service import generate_unified_signals_with_configs
 from app.services.storage.excel_storage_service import excel_storage
 import pandas as pd
 import datetime
@@ -73,7 +73,7 @@ def debug_backtest_system():
         }
         
         # 注意：使用price_data参数而不是df
-        data_only_result = generate_unified_signals(
+        data_only_result = generate_unified_signals_with_configs(
             price_data=df,  # 使用price_data参数
             events_data=None,
             data_signal_config=data_signal_config,

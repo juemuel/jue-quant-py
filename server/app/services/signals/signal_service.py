@@ -4,6 +4,8 @@ import numpy as np
 from typing import List, Dict, Optional
 from datetime import datetime
 
+from server.common.debug_utils import debug_signals
+
 # 导入数据驱动相关
 from .signal_rules.data_signal_rules import (
     TechnicalSignalContext,
@@ -49,13 +51,10 @@ class DataSignalGenerator:
         logger.info(f"[SignalService]信号规则: {[rule.__name__ for rule in self.signal_rules]}")
         logger.info(f"[SignalService]过滤规则: {[rule.__name__ for rule in self.filter_rules]}")
         logger.info(f"[SignalService]可用指标: {list(indicators.keys())}")
-        
         # 添加详细的指标统计信息
         for name, series in indicators.items():
             valid_count = series.notna().sum()
             logger.info(f"[SignalService]指标 {name}: 长度={len(series)}, 有效值数量={valid_count}, 类型={series.dtype}")
-            if len(series) > 0:
-                logger.info(f"[SignalService]指标 {name} 样本值: 索引20={series.iloc[20] if len(series) > 20 else 'N/A'}, 索引50={series.iloc[50] if len(series) > 50 else 'N/A'}")
         
         # 添加每个规则的信号计数器
         rule_signal_counts = {}
@@ -121,7 +120,6 @@ class DataSignalGenerator:
                             signal = self._apply_weights(signal, context)
                             signals.append(signal)
                             rule_signal_counts[rule_name] += 1
-                            logger.debug(f"[SignalService]第{i}行规则{rule_name}信号通过过滤: 类型={signal.get('signal')}, 强度={signal.get('strength'):.3f}, 原因={signal.get('reason')}")
                         else:
                             logger.debug(f"[SignalService]第{i}行规则{rule_name}信号被过滤规则拒绝")
                     else:
@@ -186,9 +184,6 @@ class DataSignalGenerator:
                             result[f'{name}_prev'] = np.nan
                         else:
                             result[f'{name}_prev'] = 0.0
-        # 添加调试信息
-        if index % 50 == 0:
-            logger.info(f"[SignalService]第{index}行提取的指标: {result}")
         return result
     
     def _calculate_market_context(self, df: pd.DataFrame, index: int) -> Dict[str, float]:

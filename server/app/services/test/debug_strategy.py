@@ -8,7 +8,7 @@ from app.services.data.data_service import get_stock_history
 from app.services.storage.excel_storage_service import excel_storage
 from app.services.analytics.indicator_service import IndicatorCalculator
 from app.services.strategy.strategy_service import generate_ma_crossover_signal_from_indicators, generate_rsi_signal_from_indicators
-from app.services.strategy.strategy_service import generate_unified_signals
+from app.services.strategy.strategy_service import generate_unified_signals_with_configs
 from app.services.events.event_service import MarketEvent, EventType, EventSeverity
 import datetime
 from common.debug_utils import create_debug_logger, debug_strategy, debug_backtest, debug_data_provider, debug_event_provider
@@ -620,7 +620,7 @@ def debug_unified_signals():
         # 4. 生成统一信号
         logger.step_start("4. 信号生成", "生成统一信号")
         # 4.1 生成统一组合信号
-        # unified_result = generate_unified_signals(
+        # unified_result = generate_unified_signals_with_configs(
         #     price_data=df,
         #     events_data=events_data,
         #     data_signal_config=data_signal_config,
@@ -628,7 +628,7 @@ def debug_unified_signals():
         # )
         # print(analyze_unified_signals(unified_result))
         # 4.2 生成仅数据驱动的信号
-        data_only_result = generate_unified_signals(
+        data_only_result = generate_unified_signals_with_configs(
             price_data=df,
             events_data=None,  # 不提供事件数据
             data_signal_config=data_signal_config,
@@ -636,7 +636,7 @@ def debug_unified_signals():
         )
         print(analyze_unified_signals(data_only_result))
         # 4.3 生成仅事件驱动的信号
-        # event_only_result = generate_unified_signals(
+        # event_only_result = generate_unified_signals_with_configs(
         #     price_data=df,
         #     events_data=events_data,
         #     data_signal_config=None,
@@ -644,7 +644,7 @@ def debug_unified_signals():
         # )
         # print(analyze_unified_signals(event_only_result))
         # 4.4 生成默认配置的信号
-        # default_result = generate_unified_signals(price_data=df, events_data=events_data)
+        # default_result = generate_unified_signals_with_configs(price_data=df, events_data=events_data)
         # print(analyze_unified_signals(default_result))
         
         # 5. 分析结果

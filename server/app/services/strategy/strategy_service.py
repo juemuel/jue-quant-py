@@ -28,7 +28,7 @@ from app.services.risk.risk_manage_service import (
     calculate_sharpe_ratio, calculate_var, calculate_win_rate)
 from app.services.signals.signal_service import DataSignalGenerator, EventSignalGenerator, UnifiedSignalManager
 from app.services.events.event_service import MarketEvent, EventType, EventSeverity 
-from app.services.analytics.indicator_service import IndicatorCalculator, calculate_indicators_for_strategy
+from app.services.analytics.indicator_service import IndicatorCalculator, calculate_indicators_for_rule_configs
 from datetime import datetime as dt
 import datetime
 import pandas as pd
@@ -684,7 +684,7 @@ def generate_event_driven_signals(events_data: List[Dict], signal_rules=None):
 
 # ============ 多驱动信号 ============
 # 3.1 统一驱动信号-生成器(既支持数据信号也支持事件信号)
-def generate_unified_signals(price_data: pd.DataFrame, 
+def generate_unified_signals_with_configs(price_data: pd.DataFrame, 
                            data_signal_config: Optional[Dict] = None,
                            event_signal_config: Optional[Dict] = None,
                            events_data: Optional[List[Dict]] = None,
@@ -782,17 +782,13 @@ def generate_unified_signals(price_data: pd.DataFrame,
                 logger.warning("[Strategy]所有数据驱动信号规则都已禁用，跳过数据信号生成")
                 data_signals = []
             else:
-                debug_signals("启用的数据信号规则", {
-                    "规则列表": enabled_data_rules,
-                })
-                
                 # 计算技术指标
                 indicators = {}
                 try:
-                    indicators, _ = calculate_indicators_for_strategy(price_data, data_signal_config)
+                    indicators, _ = calculate_indicators_for_rule_configs(price_data, data_signal_config)
                     # 修复：先获取字典的键，再进行切片
                     indicator_keys = list(indicators.keys())
-                    debug_signals("技术指标计算", {
+                    debug_signals("技术指标计算汇总", {
                         "指标数量": len(indicators),
                         "指标列表": ", ".join(indicator_keys[:20]) + (f"... 还有{len(indicators)-20}个" if len(indicators) > 20 else ""),
                         "数据行数": len(price_data)
@@ -962,6 +958,66 @@ def generate_unified_signals(price_data: pd.DataFrame,
         logger.error(f"[Strategy]统一信号生成失败: {e}")
         return {"status": "error", "message": f"统一信号生成失败: {e}"}
 
+def generate_unified_signal_with_names(symbol: str, 
+                                          start_date: str, 
+                                          end_date: str,
+                                          rule_names: List[str] = None,
+                                          **kwargs) -> Dict:
+    """使用规则注册表生成统一信号"""
+    try:
+        # 如果未指定规则，使用默认规则
+        if not rule_names:
+            rule_names = ['default_ma_crossover', 'default_rsi']
+        
+        # 验证规则是否存在
+        valid_rules = []
+        for rule_name in rule_names:
+            if rule_registry.get_rule(rule_name):
+                valid_rules.append(rule_name)
+            else:
+                logger.warning(f"[Strategy]规则 {rule_name} 不存在，跳过")
+        
+        if not valid_rules:
+            return {"status": "error", "message": "没有有效的规则"}
+        
+        logger.info(f"[Strategy]使用规则: {valid_rules}")
+        
+        # 获取价格数据
+        price_data = get_and_preprocess_stock_data(symbol, start_date, end_date)
+        if price_data.empty:
+            return {"status": "error", "message": "无法获取价格数据"}
+        
+        # 基于规则计算所需指标
+        indicators = calculate_indicators_for_rules(price_data, valid_rules)
+        
+        # 创建信号生成器并添加规则
+        data_generator = DataSignalGenerator()
+        for rule_name in valid_rules:
+            rule_info = rule_registry.get_rule(rule_name)
+            data_generator.add_signal_rule(rule_info['func'])
+        
+        # 生成信号
+        data_signals = data_generator.generate_signals(price_data, indicators)
+        
+        # 统计信息
+        rule_summary = rule_registry.get_rule_summary()
+        indicator_summary = rule_registry.get_all_indicators(valid_rules)
+        
+        return {
+            "status": "success",
+            "data": {
+                "signals": data_signals,
+                "rules_used": valid_rules,
+                "indicators_calculated": list(indicators.keys()),
+                "rule_summary": rule_summary,
+                "indicator_summary": indicator_summary
+            },
+            "message": f"成功生成 {len(data_signals)} 个信号"
+        }
+        
+    except Exception as e:
+        logger.error(f"[Strategy]信号生成失败: {e}")
+        return {"status": "error", "message": f"信号生成失败: {e}"}
 
 
 # 简单回测功能（信号驱动+全仓交易）(TODO)
@@ -2484,7 +2540,7 @@ def create_hybrid_portfolio():
     strategies_config = [
         {
             'name': 'Technical_Signals',
-            'function': lambda df: generate_unified_signals(
+            'function': lambda df: generate_unified_signals_with_configs(
                 price_data=df,
                 data_signal_config={'rules': ['default_ma_crossover_rule', 'default_rsi_rule']}
             ),
@@ -2493,7 +2549,7 @@ def create_hybrid_portfolio():
         },
         {
             'name': 'Event_Signals',
-            'function': lambda df: generate_unified_signals(
+            'function': lambda df: generate_unified_signals_with_configs(
                 price_data=df,
                 events_data=events_data,
                 event_signal_config={'rules': ['news_sentiment_rule']}
