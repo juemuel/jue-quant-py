@@ -98,7 +98,7 @@ class AkShareProvider:
             "返回列名": df.columns.tolist(),
             "第一行数据": df.iloc[0].to_dict() if len(df) > 0 else None,
             "价格列数据类型": {col: str(df[col].dtype) for col in ['开盘', '收盘', '最高', '最低'] if col in df.columns}
-        })
+        }, level="INFO", horizontal_output=True, show_full_content=True)
         
         # 详细的价格数据检查（仅在DEBUG级别显示）
         if len(df) > 0:

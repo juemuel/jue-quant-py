@@ -6,46 +6,52 @@ from app.services.strategy.backtest_service import EnhancedBacktestService, Back
 from app.services.test.debug_strategy import debug_unified_signals, get_and_preprocess_stock_data
 from app.services.strategy.strategy_service import generate_unified_signals_with_configs
 from app.services.storage.excel_storage_service import excel_storage
-from app.services.test.debug_strategy import create_mock_events_data
+from app.services.test.debug_strategy import create_mock_events_data, analyze_unified_signals
+from app.services.events.event_service import MarketEvent, EventType, EventSeverity
 import pandas as pd
 import datetime
 from core.logger import logger
+from common.debug_utils import create_debug_logger, debug_signals, debug_strategy, debug_backtest, debug_data_provider, debug_event_provider
 
 def debug_backtest_system():
+    """
+    调试回测系统
+    """
+    # 创建调试日志管理器
+    logger = create_debug_logger("调试回测系统功能", "backtest")
+    logger.start_session("调试回测系统功能", "测试统一信号生成和回测执行")
     try:
-        print("=== 开始测试回测系统 ===")
-        
-        # 1. 直接调用debug_unified_signals获取信号数据
-        print("\n1. 生成统一信号（使用debug_strategy方法）...")
-        
-        # 临时重定向debug_unified_signals的输出，获取其生成的信号数据
-        # 由于debug_unified_signals主要用于调试输出，我们需要修改策略
-        
-        # 方案1：直接获取数据和信号
-        success, df, message = get_and_preprocess_stock_data(
-            source="akshare",
-            code="000001", 
-            market="SH",
-            start_date="20240101",
-            end_date="20241201"
-        )
-        
+        # 1. 数据获取（此处用了函数默认值）
+        logger.step_start("1. 数据获取", "获取和预处理股票数据")
+        success, df, message = get_and_preprocess_stock_data()
         if not success:
-            print(f"❌ 数据获取失败: {message}")
+            logger.step_error("数据获取失败", message)
             return
-            
-        print(f"✓ {message}")
+        logger.step_success("数据获取", f"获取 {len(df)} 行数据", {
+            'data_rows': len(df),
+            'date_range': f"{df['日期'].min()} ~ {df['日期'].max()}"
+        })
+        # 检查和修复价格数据的日期索引
+        data_df = df.copy()
+        data_df['日期'] = pd.to_datetime(data_df['日期'])
+        data_df = data_df.set_index('日期')
+        debug_signals("价格数据调试", {
+                "价格数据形状": data_df.shape,
+                "价格数据列名": list(data_df.columns),
+                "价格数据样例": data_df.head() if not data_df.empty else "无数据"
+            }, level="INFO", horizontal_output=True, show_full_content=True)
         
-        # 使用debug_strategy中相同的配置
+        # 2. 信号配置
+        logger.step_start("2. 信号配置", "创建数据信号和事件信号配置")
         data_signal_config = {
             'ma_crossover': {
                 'enable': True,
-                'use_parameterized': False,   # False固定参数，与debug_basic_strategy_flow一致；True参数化,支持adaptive自适应，filter过滤参数配置；
-                'short_period': 5,           # 与debug_basic_strategy_flow相同
-                'long_period': 20,           # 与debug_basic_strategy_flow相同
-                'adaptive': True,            # 启用自适应周期适配（需要use_parameterized为True）
+                'use_parameterized': True,
+                'short_period': 5,
+                'long_period': 20,
+                'adaptive': True,
                 'filter_config': {
-                    'volatility_filter': {'enable': False, 'min_volatility': 0.3, 'max_volatility': 1},  # 禁用过滤器
+                    'volatility_filter': {'enable': True, 'min_volatility': 0.3, 'max_volatility': 1},
                     'volume_confirmation': {'enable': False, 'volume_multiplier': 1, 'lookback_days': 20},
                     'trend_strength_filter': {'enable': False, 'min_adx': 25},
                     'signal_strength_filter': {'enable': False, 'min_strength': 0.3}
@@ -53,263 +59,318 @@ def debug_backtest_system():
             },
             'rsi': {
                 'enable': True,
-                'use_parameterized': False,   # False固定参数，与debug_basic_strategy_flow一致；True参数化,支持adaptive自适应，filter过滤参数配置；
-                'period': 14,                # 与debug_basic_strategy_flow相同
-                'oversold': 30,              # 与debug_basic_strategy_flow相同
-                'overbought': 70,            # 与debug_basic_strategy_flow相同
-                'adaptive': True,            # 启用自适应周期适配（需要use_parameterized为True）
+                'use_parameterized': True,
+                'period': 14,
+                'oversold': 30,
+                'overbought': 70,
+                'adaptive': True,
                 'filter_config': {
-                    'volume_confirmation': {'enable': False, 'volume_multiplier': 1, 'lookback_days': 20},  # 禁用过滤器
+                    'volume_confirmation': {'enable': True, 'volume_multiplier': 1, 'lookback_days': 20},
                     'volatility_filter': {'enable': False, 'min_volatility': 0.3, 'max_volatility': 0.5},
                     'trend_strength_filter': {'enable': False, 'min_adx': 25},
                     'signal_strength_filter': {'enable': False, 'min_strength': 0.3}
                 }
             }
         }
-        
-        # 注意：使用price_data参数而不是df
-        data_only_result = generate_unified_signals_with_configs(
-            price_data=df,  # 使用price_data参数
-            events_data=None,
+        event_signal_config = {
+            'news_sentiment': {
+                'enable': False,
+                'use_parameterized': True,
+                'sentiment_threshold': 0.8,
+                'severity_levels': [EventSeverity.HIGH, EventSeverity.CRITICAL]
+            },
+            'earnings': {
+                'enable': False,
+                'use_parameterized': False
+            },
+            'keyword_trigger': {
+                'enable': False,
+                'use_parameterized': True,
+                'positive_keywords': ['突破', '创新高', '利好'],
+                'negative_keywords': ['暴跌', '亏损', '风险'],
+                'strength': 0.7,
+            }
+        }
+        config_details = {
+            '数据信号规则': {
+                '规则数量': len([k for k, v in data_signal_config.items() if v.get('enable', False)]),
+                '启用规则': [k for k, v in data_signal_config.items() if v.get('enable', False)]
+            },
+            '事件信号规则': {
+                '规则数量': len([k for k, v in event_signal_config.items() if v.get('enable', False)]),
+                '启用规则': [k for k, v in event_signal_config.items() if v.get('enable', False)]
+            }
+        }
+        logger.step_success("信号配置", "信号配置创建完成", config_details)
+         # 3. 事件获取
+        logger.step_start("3. 事件获取", "创建模拟事件数据")
+        # 检查是否有启用的事件信号规则
+        enabled_event_rules = [k for k, v in event_signal_config.items() if v.get('enable', False)]
+        has_enabled_events = len(enabled_event_rules) > 0
+        events_data = None
+        if has_enabled_events:
+            events_result = create_mock_events_data(
+                df,
+                event_count=300
+            )
+            if not events_result['success']:
+                logger.step_error("事件获取", events_result['message'])
+                return
+            events_data = events_result['data']
+            logger.step_success("事件获取", events_result['message'], {
+                'events_generated': len(events_data),
+                'enabled_rules': enabled_event_rules,
+                'time_range': {
+                    'start': events_data[0].timestamp.strftime('%Y-%m-%d'),
+                    'end': events_data[-1].timestamp.strftime('%Y-%m-%d')
+                }
+            })
+        else:
+            logger.step_skip("生成模拟事件", "事件信号规则未启用，跳过事件数据生成")
+        # 4. 信号生成
+        logger.step_start("4. 信号生成", "生成统一信号")
+        unified_result = generate_unified_signals_with_configs(
+            price_data=df,
+            events_data=events_data,  # 不提供事件数据
             data_signal_config=data_signal_config,
-            event_signal_config=None
+            event_signal_config=event_signal_config 
         )
-        
-        if data_only_result.get('status') != 'success':
-            print(f"❌ 信号生成失败: {data_only_result.get('message')}")
-            return
-            
-        signals_data = data_only_result.get('data', {})
-        unified_signals = signals_data.get('unified_signals')
-        
+        debug_signals(analyze_unified_signals(unified_result))
+        unified_signals = unified_result.get('data', {}).get('unified_signals')
         if unified_signals is None or len(unified_signals) == 0:
             print("❌ 没有生成有效的统一信号")
             return
-            
+        
         signals_df = pd.DataFrame(unified_signals)
-        print(f"✓ 生成了 {len(signals_df)} 条信号记录")
+        # 确保信号数据中的timestamp也是datetime格式
+        if 'timestamp' in signals_df.columns:
+            signals_df['timestamp'] = pd.to_datetime(signals_df['timestamp'])
+        debug_signals("信号数据调试", {
+            "信号数据形状": signals_df.shape,
+            "信号数据列名": list(signals_df.columns),
+            "信号数据样例": signals_df.head() if not signals_df.empty else "无数据"
+        }, level="INFO", horizontal_output=True, show_full_content=True)
+        # 为回测做字段处理
+        if 'direction' in signals_df.columns and 'action' not in signals_df.columns:
+            # 数字到action的映射
+            direction_to_action = {
+                1: 'buy',    # 买入
+                -1: 'sell',  # 卖出
+                0: 'hold'    # 观望（但回测系统会忽略这个）
+            }
+            signals_df['action'] = signals_df['direction'].map(direction_to_action)
+            debug_signals("action字段转换", {
+                "action字段值分布": signals_df['action'].value_counts().to_dict()
+            })
+            # 过滤掉观望信号（action为'hold'或None的）
+            valid_signals = signals_df[signals_df['action'].isin(['buy', 'sell'])]
+            debug_signals("有效交易信号", {
+                "有效交易信号数量": len(valid_signals),
+                "过滤前信号数量": len(signals_df)
+            })
+            # 使用有效信号
+            signals_df = valid_signals
         
-    
+        if not signals_df.empty:
+            # 检查direction字段的值分布
+            debug_signals("direction字段分布", {
+                "direction值分布": signals_df['direction'].value_counts().to_dict()
+            })
 
-        # 2. 配置回测参数
-        print("\n2. 配置回测参数...")
-        trading_cost = TradingCost(
-            commission_rate=0.0003,
-            stamp_tax_rate=0.001,
-            min_commission=5.0,
-            slippage_rate=0.001
-        )
-        
-        config = BacktestConfig(
-            initial_capital=1000000,
-            trading_cost=trading_cost,
-            max_position_size=0.95,
-            benchmark_symbol="000300.SH"
-        )
-        
-        # 3. 执行回测
-        print("\n3. 执行回测...")
-        
-        # 添加调试信息
-        print(f"\n=== 调试信息 ===")
-        print(f"价格数据形状: {df.shape}")
-        print(f"价格数据列: {list(df.columns)}")
-        print(f"信号数量: {len(signals_df)}")
-        print(f"信号列: {list(signals_df.columns)}")
-        
-        print(f"价格数据日期范围: {df['日期'].min()} 到 {df['日期'].max()}")
-        
-        # 检查信号强度分布
-        if 'signal_strength' in signals_df.columns:
-            strength_stats = signals_df['signal_strength'].describe()
-            print(f"信号强度统计: \n{strength_stats}")
+            signal_dates = set(signals_df['timestamp'].dt.date)
+            price_dates = set(data_df.index.date if hasattr(data_df.index[0], 'date') else data_df.index)
+            overlapping_dates = signal_dates.intersection(price_dates)
+            debug_signals("日期重叠调试", {
+                "信号日期数量": len(signal_dates),
+                "信号日期类型": type(signal_dates),
+                "信号日期范围": f"{min(signal_dates)} 到 {max(signal_dates)}",
+                "信号日期样例": list(signal_dates)[:5] if len(signal_dates) > 0 else "无",
+                "价格日期数量": len(price_dates),
+                "价格日期类型": type(df.index[0]).__name__ if len(price_dates) > 0 else "无",
+                "价格日期范围": f"{min(price_dates)} ~ {max(price_dates)}",
+                "价格日期样例": list(price_dates)[:5] if len(price_dates) > 0 else "无",
+                "重叠日期数量": len(overlapping_dates),
+                "重叠日期样例": list(overlapping_dates)[:5] if len(overlapping_dates) > 0 else "无"
+            }, level="INFO", horizontal_output=True, show_full_content=True)
 
-        # 添加日期匹配调试
-        print(f"\n=== 日期匹配调试 ===")
+        if 'strength' in signals_df.columns:
+            signals_df['strength'] = signals_df['strength'].apply(lambda x: max(0.1, abs(x)))
+
+        # 转换回字典列表格式
+        unified_signals = signals_df.to_dict('records')
+        logger.step_info("回测信号数量：", len(unified_signals))
+
+       # 5. 回测配置
+        logger.step_start("5. 回测配置", "配置回测参数")
+        # 配置回测参数
+        backtest_config = BacktestConfig(
+            initial_capital=1000000.0,
+            max_position_size=0.80,
+            trading_cost=TradingCost(
+                commission_rate=0.0003,
+                min_commission=5.0,
+                stamp_tax_rate=0.001,
+                transfer_fee_rate=0.00002
+            )
+        )
+        config_info = {
+            '初始资金': f"{backtest_config.initial_capital:,.0f} 元",
+            '最大仓位': f"{backtest_config.max_position_size*100:.1f}%",
+            # 移除最小交易金额的显示
+            '交易成本': {
+                '佣金费率': f"{backtest_config.trading_cost.commission_rate*10000:.1f} 万分之一",
+                '最小佣金': f"{backtest_config.trading_cost.min_commission:.0f} 元",
+                '印花税': f"{backtest_config.trading_cost.stamp_tax_rate*1000:.1f} 千分之一",
+                '过户费': f"{backtest_config.trading_cost.transfer_fee_rate*100000:.1f} 十万分之一"
+            }
+        }
+        logger.step_success("回测配置", "回测参数配置完成", config_info)
         
-        # 准备数据用于调试
-        price_data_for_debug = df.set_index('日期')
-        signals_list_for_debug = signals_df.to_dict('records')
+        # 6. 执行回测
+        logger.step_start("6. 回测执行", "执行回测计算")
+        backtest_service = EnhancedBacktestService(config=backtest_config)
+        backtest_result = backtest_service.realistic_backtest(
+            price_data=data_df,
+            signals=unified_signals
+        )
+        if not backtest_result.get('success', False):
+            logger.step_error("回测执行失败", backtest_result.get('message', '未知错误'))
+            return
+       
+         # 分析回测结果
+        performance = backtest_result.get('data', {}).get('performance', {})
+        trades = backtest_result.get('data', {}).get('trades', [])
         
-        price_dates = price_data_for_debug.index.tolist()
-        signal_dates = [pd.to_datetime(s['timestamp']).date() for s in signals_list_for_debug]
+        backtest_stats = {
+            '回测结果': {
+                '总收益率': f"{performance.get('total_return', 0)*100:.2f}%",
+                '年化收益率': f"{performance.get('annualized_return', 0)*100:.2f}%",
+                '最大回撤': f"{performance.get('max_drawdown', 0)*100:.2f}%",
+                '夏普比率': f"{performance.get('sharpe_ratio', 0):.3f}"
+            },
+            '交易统计': {
+                '总交易次数': len(trades),
+                '盈利交易': len([t for t in trades if t.get('pnl', 0) > 0]),
+                '亏损交易': len([t for t in trades if t.get('pnl', 0) < 0]),
+                '胜率': f"{len([t for t in trades if t.get('pnl', 0) > 0])/max(1, len(trades))*100:.1f}%" if trades else "0%"
+            }
+        }
+        logger.step_success("回测执行", "回测计算完成", backtest_stats)
         
-        print(f"价格数据日期示例: {price_dates[:5]}")
-        print(f"价格数据日期类型: {type(price_dates[0])}")
-        print(f"信号日期示例: {signal_dates[:5]}")
-        print(f"信号日期类型: {type(signal_dates[0])}")
+        # 7. 结果分析与导出
+        logger.step_start("7. 结果分析", "分析回测结果并输出详细信息")
         
-        # 检查日期重叠
-        price_date_set = set([d.date() if hasattr(d, 'date') else pd.to_datetime(d).date() for d in price_dates])
-        signal_date_set = set(signal_dates)
-        overlap = price_date_set.intersection(signal_date_set)
-        print(f"重叠日期数量: {len(overlap)}")
-        if overlap:
-            print(f"重叠日期示例: {list(overlap)[:5]}")
+        # 7.1 输出详细的回测分析结果
+        print("\n=== 回测结果摘要 ===")
+        performance = backtest_result.get('data', {}).get('performance', {})
+        trades = backtest_result.get('data', {}).get('trades', [])
+        
+        # 基本性能指标
+        print(f"总收益率: {performance.get('total_return', 0)*100:.2f}%")
+        print(f"年化收益率: {performance.get('annualized_return', 0)*100:.2f}%")
+        print(f"年化波动率: {performance.get('volatility', 0)*100:.2f}%")
+        print(f"夏普比率: {performance.get('sharpe_ratio', 0):.2f}")
+        print(f"最大回撤: {performance.get('max_drawdown', 0)*100:.2f}%")
+        
+        # 交易统计
+        print(f"\n=== 交易统计 ===")
+        profitable_trades = len([t for t in trades if t.get('pnl', 0) > 0])
+        losing_trades = len([t for t in trades if t.get('pnl', 0) < 0])
+        total_trades = len(trades)
+        
+        if total_trades > 0:
+            win_rate = profitable_trades / total_trades
+            avg_win = sum([t.get('pnl', 0) for t in trades if t.get('pnl', 0) > 0]) / max(1, profitable_trades)
+            avg_loss = sum([t.get('pnl', 0) for t in trades if t.get('pnl', 0) < 0]) / max(1, losing_trades)
+            profit_factor = abs(avg_win / avg_loss) if avg_loss != 0 else 0
+            total_trading_costs = sum([t.get('cost', 0) for t in trades])
+            
+            print(f"总交易次数: {total_trades}")
+            print(f"盈利交易次数: {profitable_trades}")
+            print(f"亏损交易次数: {losing_trades}")
+            print(f"胜率: {win_rate:.2%}")
+            print(f"平均盈利: {avg_win:.2f}%")
+            print(f"平均亏损: {avg_loss:.2f}%")
+            print(f"盈亏比: {profit_factor:.2f}")
+            print(f"总交易成本: {total_trading_costs:.2f}")
+            print(f"初始资产: {backtest_config.initial_capital:.2f}")
+            print(f"最终资产: {performance.get('final_value', backtest_config.initial_capital):.2f}")
         else:
-            print("❌ 没有重叠日期！这就是为什么没有执行交易的原因")
-            print(f"价格日期范围: {min(price_date_set)} 到 {max(price_date_set)}")
-            print(f"信号日期范围: {min(signal_date_set)} 到 {max(signal_date_set)}")
-
-
-        # 创建回测服务时传入配置
-        backtest_service = EnhancedBacktestService(config=config)
-         # 准备数据：将日期设为索引
-        price_data_indexed = df.set_index('日期')
+            print("没有执行任何交易")
         
-        # 将signals_df转换为字典列表
-        signals_list = signals_df.to_dict('records')
-                # 转换信号格式以匹配回测服务的期望
-        print(f"\n=== 信号格式转换 ===")
-        converted_signals = []
-        for signal in signals_list:
-            # 检查原始信号格式
-            if len(converted_signals) < 3:  # 只打印前3个原始信号
-                print(f"原始信号: {signal}")
-            
-            # 获取信号强度，确保有合理的最小值
-            original_strength = signal.get('strength', signal.get('signal_strength', 0.5))
-            # 如果信号强度太小，设置一个最小值
-            adjusted_strength = max(abs(original_strength), 0.1)  # 最小10%的仓位
-            
-            # 转换为回测服务期望的格式
-            converted_signal = {
-                'symbol': signal.get('symbol', '000001.SH'),
-                'action': signal.get('signal_type', 'buy'),  # 直接使用signal_type
-                'strength': adjusted_strength,
-                'timestamp': signal.get('timestamp')
+        # 基准对比（如果有）
+        benchmark_metrics = performance.get('benchmark_metrics', {})
+        if benchmark_metrics:
+            print(f"\n=== 基准对比 ===")
+            print(f"基准收益率: {benchmark_metrics.get('benchmark_return', 0):.2%}")
+            print(f"超额收益: {benchmark_metrics.get('excess_return', 0):.2%}")
+            print(f"Alpha: {benchmark_metrics.get('alpha', 0):.2%}")
+            print(f"Beta: {benchmark_metrics.get('beta', 0):.2f}")
+        
+        # 记录分析结果到日志
+        analysis_stats = {
+            '性能指标': {
+                '总收益率': f"{performance.get('total_return', 0)*100:.2f}%",
+                '年化收益率': f"{performance.get('annualized_return', 0)*100:.2f}%",
+                '最大回撤': f"{performance.get('max_drawdown', 0)*100:.2f}%",
+                '夏普比率': f"{performance.get('sharpe_ratio', 0):.3f}"
+            },
+            '交易统计': {
+                '总交易次数': total_trades,
+                '盈利交易': profitable_trades,
+                '亏损交易': losing_trades,
+                '胜率': f"{win_rate*100:.1f}%" if total_trades > 0 else "0%"
+            }
+        }
+        logger.step_success("结果分析", "回测结果分析完成", analysis_stats)
+
+
+        # 7.2 导出到Excel
+        logger.step_start("8. 结果导出", "导出回测结果到Excel")
+        
+        try:
+            # 创建汇总信息
+            summary_info = {
+                '项目': ['股票代码', '数据时间范围', '股票数据行数', '统一信号数量', 
+                        '总收益率', '年化收益率', '最大回撤', '夏普比率', '总交易次数', '胜率', '导出时间'],
+                '值': [
+                    '000001.SH',
+                    f"{df['日期'].min()} ~ {df['日期'].max()}",
+                    len(df),
+                    len(unified_signals),
+                    f"{performance.get('total_return', 0)*100:.2f}%",
+                    f"{performance.get('annualized_return', 0)*100:.2f}%",
+                    f"{performance.get('max_drawdown', 0)*100:.2f}%",
+                    f"{performance.get('sharpe_ratio', 0):.3f}",
+                    total_trades,
+                    f"{win_rate*100:.1f}%" if total_trades > 0 else "0%",
+                    datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                ]
             }
             
-            # 确保action字段正确
-            if converted_signal['action'] not in ['buy', 'sell']:
-                # 根据direction判断
-                direction = signal.get('direction', 1)
-                converted_signal['action'] = 'buy' if direction > 0 else 'sell'
-            
-            converted_signals.append(converted_signal)
-            
-            if len(converted_signals) <= 3:  # 只打印前3个转换后的信号
-                print(f"转换后信号: {converted_signal}")
-        
-        print(f"转换完成，共{len(converted_signals)}个信号")
-        print(f"信号强度调整: 原始范围可能很小，已调整为最小0.1")
-        # 统计信号类型
-        buy_signals = [s for s in converted_signals if s['action'] == 'buy']
-        sell_signals = [s for s in converted_signals if s['action'] == 'sell']
-        print(f"买入信号数量: {len(buy_signals)}")
-        print(f"卖出信号数量: {len(sell_signals)}")
-        if buy_signals:
-            print(f"买入信号示例: {buy_signals[0]}")
-
-        # 使用转换后的信号
-        signals_list = converted_signals
-        
-        # 添加回测前的最终检查
-        print(f"\n=== 回测前最终检查 ===")
-        print(f"价格数据索引类型: {type(price_data_indexed.index[0])}")
-        print(f"价格数据列名: {list(price_data_indexed.columns)}")
-        print(f"信号列表长度: {len(signals_list)}")
-        
-        # 检查价格数据是否包含必要的列
-        required_columns = ['close', '收盘价']
-        available_columns = [col for col in required_columns if col in price_data_indexed.columns]
-        print(f"可用的价格列: {available_columns}")
-        
-        if not available_columns:
-            print(f"❌ 错误：价格数据中缺少收盘价列！")
-            print(f"当前列名: {list(price_data_indexed.columns)}")
-            return
-        
-        # 检查几个具体日期的信号和价格匹配
-        print(f"\n=== 前10个信号详情 ===")
-        for i, signal in enumerate(signals_list[:10]):
-            signal_date = pd.to_datetime(signal['timestamp']).date()
-            print(f"信号{i+1}: {signal_date} | {signal['action']} | 强度:{signal['strength']:.3f} | {signal['symbol']}")
-            
-            # 检查该日期是否在价格数据中
-            matching_dates = [d for d in price_data_indexed.index if d.date() == signal_date]
-            if matching_dates:
-                price_date = matching_dates[0]
-                price_row = price_data_indexed.loc[price_date]
-                close_price = price_row.get('close', price_row.get('收盘价', 0))
-                print(f"  匹配价格日期: {price_date}")
-                print(f"  收盘价: {close_price}")
-            else:
-                print(f"  ❌ 该日期在价格数据中不存在")
-        
-        # 检查配置
-        print(f"\n=== 配置检查 ===")
-        print(f"初始资金: {config.initial_capital}")
-        print(f"最大仓位: {config.max_position_size}")
-        print(f"手续费率: {config.trading_cost.commission_rate}")
-
-        # # 回测调用：realistic_backtest
-        backtest_result = backtest_service.realistic_backtest(
-            price_data=price_data_indexed,
-            signals=signals_list
-        )
-        
-        if backtest_result.get('status') != 'success':
-            print(f"❌ 回测执行失败: {backtest_result.get('message')}")
-            return
-        
-        # # 4. 分析回测结果
-        print("\n4. 分析回测结果...")
-        if backtest_result['status'] == 'success':
-            result_data = backtest_result['data']
-            performance_metrics = result_data['performance_metrics']
-            
-            print("\n=== 回测结果摘要 ===")
-            print(f"总收益率: {performance_metrics['total_return']:.2%}")
-            print(f"年化收益率: {performance_metrics['annual_return']:.2%}")
-            print(f"年化波动率: {performance_metrics['volatility']:.2%}")
-            print(f"夏普比率: {performance_metrics['sharpe_ratio']:.2f}")
-            print(f"最大回撤: {performance_metrics['max_drawdown']:.2%}")
-            
-            # 交易统计 - 从result_data中获取，而不是从performance_metrics中获取
-            trade_stats = result_data.get('trade_statistics', {})
-            print(f"\n=== 交易统计 ===")
-            if trade_stats:
-                print(f"总交易次数: {trade_stats.get('total_trades', 0)}")
-                print(f"盈利交易次数: {trade_stats.get('profitable_trades', 0)}")
-                print(f"亏损交易次数: {trade_stats.get('losing_trades', 0)}")
-                print(f"胜率: {trade_stats.get('win_rate', 0):.2%}")
-                print(f"平均盈利: {trade_stats.get('avg_win', 0):.2f}%")
-                print(f"平均亏损: {trade_stats.get('avg_loss', 0):.2f}%")
-                print(f"盈亏比: {trade_stats.get('profit_factor', 0):.2f}")
-                print(f"总交易成本: {trade_stats.get('total_trading_costs', 0):.2f}")
-                print(f"初始资产: {trade_stats.get('initial_capital', 0):.2f}")
-                print(f"最终资产: {trade_stats.get('final_portfolio_value', 0):.2f}")
-            else:
-                print("没有执行任何交易")
-    
-            # 基准对比（如果有）
-            benchmark_metrics = performance_metrics['benchmark_metrics']
-            if benchmark_metrics:
-                print(f"\n=== 基准对比 ===")
-                print(f"基准收益率: {benchmark_metrics['benchmark_return']:.2%}")
-                print(f"超额收益: {benchmark_metrics['excess_return']:.2%}")
-                print(f"Alpha: {benchmark_metrics['alpha']:.2%}")
-                print(f"Beta: {benchmark_metrics['beta']:.2f}")
-        
-        # 5. 导出回测结果
-        print("\n5. 导出回测结果...")
-        try:
-            # 使用新的专门方法导出回测结果
-            filename = excel_storage.save_backtest_results(
-                backtest_result=backtest_result,
-                config=config,
-                signals_data=signals_list,
-                price_data=price_data_indexed,
-                filename_prefix="backtest_results"
+            excel_file = excel_storage.save_backtest_results(
+                stock_data=df,
+                signals=unified_signals,
+                trades=trades,
+                performance=performance,
+                summary_info=summary_info,
+                filename_prefix="backtest_debug"
             )
-            print(f"✓ 回测结果已导出到: {filename}")
+            
+            print(f"\n✓ Excel文件已保存: {excel_file}")
+            print(f"  包含工作表: 股票历史数据, 统一信号, 交易记录, 回测表现, 汇总信息")
+            
+            export_info = {
+                '文件路径': excel_file,
+                '包含工作表': ['股票历史数据', '统一信号', '交易记录', '回测表现', '汇总信息']
+            }
+            logger.step_success("结果导出", "Excel文件导出完成", export_info)
             
         except Exception as e:
-            logger.error(f"导出回测结果失败: {e}")
-            print(f"❌ 导出失败: {e}")
-        
-        print("\n=== 回测系统测试完成 ===")
+            logger.step_error("结果导出失败", str(e))
+            print(f"❌ Excel导出失败: {e}")
+            
+        logger.end_session("回测调试完成")
         
     except Exception as e:
         logger.error(f"回测系统测试失败: {e}")

@@ -191,7 +191,6 @@ def analyze_unified_signals(unified_result):
                 result += f"  - 平均非零信号强度: {avg_strength_nonzero:.3f}\n"
                 result += f"  - 非零信号数量: {len(non_zero_strengths)}个\n"
             
-            # 新增：0信号统计
             zero_signals = len([s for s in all_strengths if s == 0])
             result += f"  - 零强度信号数量: {zero_signals}个\n"
         
@@ -442,7 +441,6 @@ def debug_basic_strategy_flow():
         if not success:
             print(f"数据准备失败: {message}")
             return
-        print(f"✓ {message}")
         
         # 2. 计算移动平均线
         success, df_with_ma, message = calculate_and_validate_indicator(
@@ -594,17 +592,17 @@ def debug_unified_signals():
         # 事件驱动信号规则配置
         event_signal_config = {
             'news_sentiment': {
-                'enable': False,
+                'enable': True,
                 'use_parameterized': True,  # 使用参数化版本
                 'sentiment_threshold': 0.8,  # 自定义阈值
                 'severity_levels': [EventSeverity.HIGH, EventSeverity.CRITICAL]
             },
             'earnings': {
-                'enable': False,
+                'enable': True,
                 'use_parameterized': False  # 使用固定参数版本
             },
             'keyword_trigger': {
-                'enable': False,
+                'enable': True,
                 'use_parameterized': True,  # 使用参数化版本
                 'positive_keywords': ['突破', '创新高', '利好'],
                 'negative_keywords': ['暴跌', '亏损', '风险'],
@@ -684,21 +682,21 @@ def debug_unified_signals():
         # )
         # print(analyze_unified_signals(unified_result))
         # 4.2 生成仅数据驱动的信号
-        data_only_result = generate_unified_signals_with_configs(
+        unified_result = generate_unified_signals_with_configs(
             price_data=df,
             events_data=None,  # 不提供事件数据
             data_signal_config=data_signal_config,
             event_signal_config=None
         )
-        print(analyze_unified_signals(data_only_result))
+        print(analyze_unified_signals(unified_result))
         # 4.3 生成仅事件驱动的信号
-        # event_only_result = generate_unified_signals_with_configs(
+        # unified_result = generate_unified_signals_with_configs(
         #     price_data=df,
         #     events_data=events_data,
         #     data_signal_config=None,
         #     event_signal_config=event_signal_config
         # )
-        # print(analyze_unified_signals(event_only_result))
+        # print(analyze_unified_signals(unified_result))
         # 4.4 生成默认配置的信号
         # default_result = generate_unified_signals_with_configs(price_data=df, events_data=events_data)
         # print(analyze_unified_signals(default_result))
@@ -709,9 +707,9 @@ def debug_unified_signals():
         
         try:
             # 提取信号数据
-            data_signals = data_only_result.get('data', {}).get('data_signals')
-            event_signals = data_only_result.get('data', {}).get('event_signals')
-            unified_signals = data_only_result.get('data', {}).get('unified_signals')
+            data_signals = unified_result.get('data', {}).get('data_signals')
+            event_signals = unified_result.get('data', {}).get('event_signals')
+            unified_signals = unified_result.get('data', {}).get('unified_signals')
             
             # 创建汇总信息
             summary_info = {
@@ -722,9 +720,9 @@ def debug_unified_signals():
                     f"{df['日期'].min()} ~ {df['日期'].max()}",
                     len(df),
                     len(events_data) if events_data is not None else 0,
-                    data_only_result.get('data', {}).get('data_signals_count', 0),
-                    data_only_result.get('data', {}).get('event_signals_count', 0),
-                    data_only_result.get('data', {}).get('total_signals', 0),
+                    unified_result.get('data', {}).get('data_signals_count', 0),
+                    unified_result.get('data', {}).get('event_signals_count', 0),
+                    unified_result.get('data', {}).get('total_signals', 0),
                     datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 ]
             }

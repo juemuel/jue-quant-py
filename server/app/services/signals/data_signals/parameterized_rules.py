@@ -78,7 +78,7 @@ class ParameterizedRuleFactory:
                 debug_flags.append('ZERO_VALUES')
             
             debug_info['available_keys'] = sorted(available_ma_keys)
-            debug_signals(f'[MA规则调试] 规则状态变化标识: {"|" .join(debug_flags)} | {debug_info}')
+            # debug_signals(f'[MA规则调试] 规则状态变化标识: {"|" .join(debug_flags)} | {debug_info}')
             
             # 添加除零保护
             if ma_long == 0:
@@ -217,7 +217,7 @@ class ParameterizedRuleFactory:
             debug_info['rsi_value'] = rsi
             debug_info['available_keys'] = sorted(available_rsi_keys)
             # 统一输出调试信息
-            debug_signals(f'[RSI规则调试] 规则状态变化标识: {"|" .join(debug_flags)} | {debug_info}')
+            # debug_signals(f'[RSI规则调试] 规则状态变化标识: {"|" .join(debug_flags)} | {debug_info}')
             # RSI超卖信号
             if rsi < oversold_adj:
                 signal = {

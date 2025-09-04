@@ -83,7 +83,8 @@ class DebugPrinter:
     
     # 同时修改DebugPrinter.print_if_enabled方法中的category_enabled检查
     @staticmethod
-    def print_if_enabled(category: str, message: str, data: Any = None, level: str = "INFO"):
+    def print_if_enabled(category: str, message: str, data: Any = None, level: str = "INFO",
+    horizontal_output: bool = False, show_full_content: bool = False):
         """根据配置决定是否打印调试信息"""
         # 检查全局调试模式
         if not DebugConfig.DEBUG_MODE:
@@ -137,18 +138,36 @@ class DebugPrinter:
             elif isinstance(data, dict):
                 for key, value in data.items():
                     if isinstance(value, list):
-                        print(ColoredConsole.colorize(f"{key}: [{len(value)}个项目]", color))
-                        if len(value) > 0:
-                            for i, item in enumerate(value[:3]):  # 只显示前3个
+                        if horizontal_output and show_full_content:
+                            # 横向输出完整内容
+                            items_str = ", ".join(str(item) for item in value)
+                            print(ColoredConsole.colorize(f"{key}: [{len(value)}个项目] - {items_str}", color))
+                        elif show_full_content:
+                            # 纵向输出完整内容
+                            print(ColoredConsole.colorize(f"{key}: [{len(value)}个项目]", color))
+                            for item in value:
                                 print(ColoredConsole.colorize(f"  - {item}", color))
-                            if len(value) > 3:
-                                print(ColoredConsole.colorize(f"  ... 还有{len(value)-3}个项目", color))
+                        else:
+                            # 原有的省略显示方式
+                            print(ColoredConsole.colorize(f"{key}: [{len(value)}个项目]", color))
+                            if len(value) > 0:
+                                for i, item in enumerate(value[:3]):  # 只显示前3个
+                                    print(ColoredConsole.colorize(f"  - {item}", color))
+                                if len(value) > 3:
+                                    print(ColoredConsole.colorize(f"  ... 还有{len(value)-3}个项目", color))
                     else:
                         print(ColoredConsole.colorize(f"{key}: {value}", color))
             elif isinstance(data, (list, tuple)):
                 print(ColoredConsole.colorize(f"数据长度: {len(data)}", color))
                 if len(data) > 0:
-                    print(ColoredConsole.colorize(f"前几个元素: {data[:5]}", color))
+                    if horizontal_output and show_full_content:
+                        items_str = ", ".join(str(item) for item in data)
+                        print(ColoredConsole.colorize(f"所有元素: {items_str}", color))
+                    elif show_full_content:
+                        for item in data:
+                            print(ColoredConsole.colorize(f"  - {item}", color))
+                    else:
+                        print(ColoredConsole.colorize(f"前几个元素: {data[:5]}", color))
             else:
                 print(ColoredConsole.colorize(f"数据: {data}", color))
                 
@@ -174,30 +193,45 @@ def debug_decorator(category: str, message: str = "", level: str = "INFO"):
         return wrapper
     return decorator
 
-def debug_data_provider(message: str, data: Any = None, level: str = "INFO"):
+def debug_data_provider(message: str, data: Any = None, level: str = "INFO", 
+                       horizontal_output: bool = False, show_full_content: bool = False):
     DebugPrinter.show_status_once('data_provider', DebugConfig.DEBUG_DATA_PROVIDER)
     if DebugConfig.DEBUG_DATA_PROVIDER:
-        DebugPrinter.print_if_enabled('data_provider', message, data, level)
-def debug_event_provider(message: str, data: Any = None, level: str = "INFO"):
+        DebugPrinter.print_if_enabled('data_provider', message, data, level, 
+                                     horizontal_output, show_full_content)
+def debug_event_provider(message: str, data: Any = None, level: str = "INFO", 
+                       horizontal_output: bool = False, show_full_content: bool = False):
     DebugPrinter.show_status_once('event_provider', DebugConfig.DEBUG_EVENT_PROVIDER)
     if DebugConfig.DEBUG_EVENT_PROVIDER:
-        DebugPrinter.print_if_enabled('event_provider', message, data, level)
-def debug_strategy(message: str, data: Any = None, level: str = "INFO"):
+        DebugPrinter.print_if_enabled('event_provider', message, data, level, 
+                                     horizontal_output, show_full_content)
+def debug_strategy(message: str, data: Any = None, level: str = "INFO", 
+                  horizontal_output: bool = False, show_full_content: bool = False):
     DebugPrinter.show_status_once('strategy', DebugConfig.DEBUG_STRATEGY)
     if DebugConfig.DEBUG_STRATEGY:
-        DebugPrinter.print_if_enabled('strategy', message, data, level)
-def debug_backtest(message: str, data: Any = None, level: str = "INFO"):
+        DebugPrinter.print_if_enabled('strategy', message, data, level, 
+                                     horizontal_output, show_full_content)
+
+def debug_backtest(message: str, data: Any = None, level: str = "INFO", 
+                  horizontal_output: bool = False, show_full_content: bool = False):
     DebugPrinter.show_status_once('backtest', DebugConfig.DEBUG_BACKTEST)
     if DebugConfig.DEBUG_BACKTEST:
-        DebugPrinter.print_if_enabled('backtest', message, data, level)
-def debug_signals(message: str, data: Any = None, level: str = "INFO"):
+        DebugPrinter.print_if_enabled('backtest', message, data, level, 
+                                     horizontal_output, show_full_content)
+
+def debug_signals(message: str, data: Any = None, level: str = "INFO", 
+                  horizontal_output: bool = False, show_full_content: bool = False):
     DebugPrinter.show_status_once('signals', DebugConfig.DEBUG_SIGNALS)
     if DebugConfig.DEBUG_SIGNALS:
-        DebugPrinter.print_if_enabled('signals', message, data, level)
-def debug_indicators(message: str, data: Any = None, level: str = "INFO"):
+        DebugPrinter.print_if_enabled('signals', message, data, level, 
+                                     horizontal_output, show_full_content)
+
+def debug_indicators(message: str, data: Any = None, level: str = "INFO", 
+                  horizontal_output: bool = False, show_full_content: bool = False):
     DebugPrinter.show_status_once('indicators', DebugConfig.DEBUG_INDICATORS)
     if DebugConfig.DEBUG_INDICATORS:
-        DebugPrinter.print_if_enabled('indicators', message, data, level)
+        DebugPrinter.print_if_enabled('indicators', message, data, level, 
+                                     horizontal_output, show_full_content)
 
 class UnifiedDebugLogger:
     """统一调试日志管理器 - 整合 debug_utils 和 progress_tracker"""
@@ -228,7 +262,7 @@ class UnifiedDebugLogger:
     def step_info(self, step_name: str, info: str = "", **kwargs):
         """步骤信息"""
         if self.progress_tracker and self._session_active:
-            self.progress_tracker.log_step_info(step_name, info, **kwargs)
+            self.progress_tracker.log_info(step_name, info, **kwargs)
         else:
             self.info(f"步骤 {step_name} 信息: {info}")
 

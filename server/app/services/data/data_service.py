@@ -46,7 +46,7 @@ def get_all_stocks(source="akshare", market=None, fields=None, page=None, page_s
             debug_data_provider("处理后数据", {
                 "处理后列名": df_processed.columns.tolist(),
                 "可用标准字段": available_fields
-            })
+            }, horizontal_output=True, show_full_content=True)
         except ValueError as e:
             logger.error(f"[Service]字段处理失败: {e}")
             return {"status": 'error', "message": str(e)}
@@ -91,10 +91,11 @@ def get_concept_stocks(source="akshare", fields=None, page=None, page_size=20):
             df_processed = result["data"]
             available_fields = result["available_fields"]
             
+            # 数据处理后的结果
             debug_data_provider("处理后数据", {
                 "处理后列名": df_processed.columns.tolist(),
                 "可用标准字段": available_fields
-            })
+            }, horizontal_output=True, show_full_content=True)
             
         except ValueError as e:
             logger.error(f"[Service]字段处理失败: {e}")
@@ -166,11 +167,11 @@ def get_concept_constituent_stocks(source="akshare", concept_identifier=None, fi
             )
             df_processed = result["data"]
             available_fields = result["available_fields"]
-            
+            # 数据处理后的结果
             debug_data_provider("处理后数据", {
                 "处理后列名": df_processed.columns.tolist(),
                 "可用标准字段": available_fields
-            })
+            }, horizontal_output=True, show_full_content=True)
             
         except ValueError as e:
             logger.error(f"[Service]字段处理失败: {e}")
@@ -235,10 +236,11 @@ def get_stock_history(source="akshare", code="000001", market="SH", start_date=N
             df_processed = result["data"]
             available_fields = result["available_fields"]
             
+            # 数据处理后的结果
             debug_data_provider("处理后数据", {
                 "处理后列名": df_processed.columns.tolist(),
                 "可用标准字段": available_fields
-            })
+            }, horizontal_output=True, show_full_content=True)
             
         except ValueError as e:
             logger.error(f"[Service]字段处理失败: {e}")
@@ -289,10 +291,11 @@ def get_realtime_quotes(source="akshare", codes=None, fields=None, page=None, pa
             df_processed = result["data"]
             available_fields = result["available_fields"]
             
+            # 数据处理后的结果
             debug_data_provider("处理后数据", {
                 "处理后列名": df_processed.columns.tolist(),
                 "可用标准字段": available_fields
-            })
+            }, horizontal_output=True, show_full_content=True)
             
         except ValueError as e:
             logger.error(f"[Service]字段处理失败: {e}")
@@ -371,10 +374,11 @@ def get_macro_data(source="akshare", indicator="GDP", start_date=None, end_date=
             df_processed = result["data"]
             available_fields = result["available_fields"]
             
+            # 数据处理后的结果
             debug_data_provider("处理后数据", {
                 "处理后列名": df_processed.columns.tolist(),
                 "可用标准字段": available_fields
-            })
+            }, horizontal_output=True, show_full_content=True)
             
         except ValueError as e:
             logger.error(f"[Service]字段处理失败: {e}")
