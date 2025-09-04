@@ -10,3 +10,8 @@ pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 （可能需要powershell管理员权限）
 
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+
+如果有时无法退出uvicorn
+tasklist | findstr uvicorn
+taskkill /F /PID <进程ID>

@@ -150,36 +150,86 @@ def analyze_unified_signals(unified_result):
     # 分析信号类型分布
     if unified_signals:
         signal_types = {}
-        signal_strengths = []
+        signal_directions = {'buy': 0, 'sell': 0, 'hold': 0}  # 新增：按方向统计
+        all_strengths = []  # 修改：统计所有信号强度
+        non_zero_strengths = []  # 保留：非零强度统计
         
         for signal in unified_signals:
             signal_type = signal.get('type', 'unknown')
             signal_types[signal_type] = signal_types.get(signal_type, 0) + 1
             
+            # 统计信号方向
+            direction = signal.get('signal_type', 'unknown')
+            if direction in signal_directions:
+                signal_directions[direction] += 1
+            
             strength = signal.get('strength', 0)
+            all_strengths.append(strength)
             if strength > 0:
-                signal_strengths.append(strength)
+                non_zero_strengths.append(strength)
         
         result += "\n统一后的信号类型分布:\n"
         for sig_type, count in signal_types.items():
             result += f"  - {sig_type}: {count}个\n"
         
-        if signal_strengths:
-            avg_strength = sum(signal_strengths) / len(signal_strengths)
-            result += f"\n平均信号强度: {avg_strength:.3f}\n"
-            result += f"最强信号强度: {max(signal_strengths):.3f}\n"
-            result += f"最弱信号强度: {min(signal_strengths):.3f}\n"
+        # 新增：详细的信号方向分布
+        result += "\n信号方向分布:\n"
+        result += f"  - 买入信号(buy): {signal_directions['buy']}个\n"
+        result += f"  - 卖出信号(sell): {signal_directions['sell']}个\n"
+        result += f"  - 观望信号(hold): {signal_directions['hold']}个\n"
         
-        # 显示前5个信号详情
-        result += "\n前10个统一信号详情:\n"
-        for i, signal in enumerate(unified_signals[:10]):
-            signal_type = signal.get('signal_type', 'unknown')
-            direction = signal.get('direction', 0)
-            reason = signal.get('reason', signal.get('metadata', {}).get('reason', 'N/A'))
-            result += f"  {i+1}. 类型: {signal_type}({direction}), "
-            result += f"强度: {signal.get('strength', 0):.3f}, "
-            result += f"时间: {signal.get('timestamp', 'N/A')}\n"
-            result += f"     原因: {reason}\n"
+        # 修改：更完整的强度统计
+        if all_strengths:
+            avg_strength_all = sum(all_strengths) / len(all_strengths)
+            result += f"\n信号强度统计:\n"
+            result += f"  - 平均信号强度(含0信号): {avg_strength_all:.3f}\n"
+            result += f"  - 最强信号强度: {max(all_strengths):.3f}\n"
+            result += f"  - 最弱信号强度: {min(all_strengths):.3f}\n"
+            
+            if non_zero_strengths:
+                avg_strength_nonzero = sum(non_zero_strengths) / len(non_zero_strengths)
+                result += f"  - 平均非零信号强度: {avg_strength_nonzero:.3f}\n"
+                result += f"  - 非零信号数量: {len(non_zero_strengths)}个\n"
+            
+            # 新增：0信号统计
+            zero_signals = len([s for s in all_strengths if s == 0])
+            result += f"  - 零强度信号数量: {zero_signals}个\n"
+        
+        # 修改：只显示非零信号的前10个详情
+        non_zero_signals = [signal for signal in unified_signals if signal.get('strength', 0) > 0]
+        
+        if non_zero_signals:
+            result += f"\n前10个非零信号详情 (共{len(non_zero_signals)}个非零信号):\n"
+            for i, signal in enumerate(non_zero_signals[:10]):
+                signal_type = signal.get('signal_type', 'unknown')
+                direction = signal.get('direction', 0)
+                strength = signal.get('strength', 0)
+                reason = signal.get('reason', signal.get('metadata', {}).get('reason', 'N/A'))
+                
+                # 添加信号类型的中文说明
+                type_desc = {
+                    'buy': '买入',
+                    'sell': '卖出', 
+                    'hold': '观望'
+                }.get(signal_type, signal_type)
+                
+                result += f"  {i+1}. 类型: {type_desc}({direction}), "
+                result += f"强度: {strength:.3f}, "
+                result += f"时间: {signal.get('timestamp', 'N/A')}\n"
+                result += f"     原因: {reason}\n"
+        else:
+            result += "\n没有找到非零信号\n"
+        
+        # 信号质量评估
+        if unified_signals:
+            buy_sell_ratio = (signal_directions['buy'] + signal_directions['sell']) / len(unified_signals)
+            result += f"\n信号质量评估:\n"
+            result += f"  - 交易信号占比: {buy_sell_ratio:.1%}\n"
+            result += f"  - 观望信号占比: {signal_directions['hold'] / len(unified_signals):.1%}\n"
+            
+            if non_zero_strengths:
+                strong_signals = len([s for s in non_zero_strengths if s >= 0.7])
+                result += f"  - 强信号数量(≥0.7): {strong_signals}个\n"
     
     return result
 def create_mock_events_data(df=None, event_count=20):
@@ -507,27 +557,9 @@ def debug_unified_signals():
             'data_rows': len(df),
             'date_range': f"{df['日期'].min()} ~ {df['日期'].max()}"
         })
-        # 2. 事件获取
-        logger.step_start("2. 事件获取", "创建模拟事件数据")
-        events_result = create_mock_events_data(
-            df,
-            event_count=300
-        )
-        # 检查事件生成结果
-        if not events_result['success']:
-            logger.step_error("事件获取", events_result['message'])
-            return
-        events_data = events_result['data']
-        logger.step_success("事件获取", events_result['message'], {
-            'events_generated': len(events_data),
-            'time_range': {
-                'start': events_data[0].timestamp.strftime('%Y-%m-%d'),
-                'end': events_data[-1].timestamp.strftime('%Y-%m-%d')
-            }
-        })
         
         # 3. 配置信号生成参数
-        logger.step_start("3. 信号配置", "创建数据信号和事件信号配置")
+        logger.step_start("2. 信号配置", "创建数据信号和事件信号配置")
         
         # 数据驱动信号规则配置
         data_signal_config = {
@@ -562,17 +594,17 @@ def debug_unified_signals():
         # 事件驱动信号规则配置
         event_signal_config = {
             'news_sentiment': {
-                'enable': True,
+                'enable': False,
                 'use_parameterized': True,  # 使用参数化版本
                 'sentiment_threshold': 0.8,  # 自定义阈值
                 'severity_levels': [EventSeverity.HIGH, EventSeverity.CRITICAL]
             },
             'earnings': {
-                'enable': True,
+                'enable': False,
                 'use_parameterized': False  # 使用固定参数版本
             },
             'keyword_trigger': {
-                'enable': True,
+                'enable': False,
                 'use_parameterized': True,  # 使用参数化版本
                 'positive_keywords': ['突破', '创新高', '利好'],
                 'negative_keywords': ['暴跌', '亏损', '风险'],
@@ -616,7 +648,31 @@ def debug_unified_signals():
             }
         }
         logger.step_success("信号配置", "信号配置创建完成", config_details)
-
+        # 3. 事件获取
+        logger.step_start("3. 事件获取", "创建模拟事件数据")
+        # 检查是否有启用的事件信号规则
+        enabled_event_rules = [k for k, v in event_signal_config.items() if v.get('enable', False)]
+        has_enabled_events = len(enabled_event_rules) > 0
+        events_data = None
+        if has_enabled_events:
+            events_result = create_mock_events_data(
+                df,
+                event_count=300
+            )
+            if not events_result['success']:
+                logger.step_error("事件获取", events_result['message'])
+                return
+            events_data = events_result['data']
+            logger.step_success("事件获取", events_result['message'], {
+                'events_generated': len(events_data),
+                'enabled_rules': enabled_event_rules,
+                'time_range': {
+                    'start': events_data[0].timestamp.strftime('%Y-%m-%d'),
+                    'end': events_data[-1].timestamp.strftime('%Y-%m-%d')
+                }
+            })
+        else:
+            logger.step_skip("生成模拟事件", "事件信号规则未启用，跳过事件数据生成")
         # 4. 生成统一信号
         logger.step_start("4. 信号生成", "生成统一信号")
         # 4.1 生成统一组合信号
@@ -665,7 +721,7 @@ def debug_unified_signals():
                     '000001.SH',
                     f"{df['日期'].min()} ~ {df['日期'].max()}",
                     len(df),
-                    len(events_data),
+                    len(events_data) if events_data is not None else 0,
                     data_only_result.get('data', {}).get('data_signals_count', 0),
                     data_only_result.get('data', {}).get('event_signals_count', 0),
                     data_only_result.get('data', {}).get('total_signals', 0),

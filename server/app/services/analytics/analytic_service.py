@@ -25,12 +25,12 @@ def calculate_moving_averages(df, periods=[5, 10, 20, 60]):
             else:
                 logger.warning("[Analytics]未找到收盘价列")
                 return {"status": "error", "message": "未找到收盘价数据"}
-            # 添加有效值起始点判断
-            first_valid_idx = result_df[f'MA{period}'].first_valid_index()
-            if first_valid_idx is not None:
-                logger.info(f"[Analytics]MA{period} 从第{first_valid_idx + 1}个交易日开始有值（索引{first_valid_idx}）")
-            else:
-                logger.warning(f"[Analytics]MA{period} 没有有效值")
+            # 添加有效值起始点调试
+            # first_valid_idx = result_df[f'MA{period}'].first_valid_index()
+            # if first_valid_idx is not None:
+            #     logger.info(f"[Analytics]MA{period} 从第{first_valid_idx + 1}个交易日开始有值（索引{first_valid_idx}）")
+            # else:
+            #     logger.warning(f"[Analytics]MA{period} 没有有效值")
         # 清理数据
         cleaned_data = clean_numeric_data(result_df)
         data_dict = safe_convert_to_dict(cleaned_data)

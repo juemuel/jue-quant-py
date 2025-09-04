@@ -6,15 +6,16 @@ import numpy as np
 from typing import List, Dict, Optional  # 添加 Optional 导入
 import datetime
 from app.services.analytics import analytic_service
-from app.services.signals.signal_rules.data_signal_rules import (
+from app.services.signals.data_signals import (
     default_ma_crossover_rule,
-    create_parameterized_ma_rule, 
     default_rsi_rule,
-    create_parameterized_rsi_rule,
+    ParameterizedRuleFactory,  # 添加这个导入
+    BASIC_RULES_METADATA,      # 添加这个导入
     trend_strength_filter_rule,
-    support_resistance_breakout_rule
+    support_resistance_breakout_rule,
+
 )
-from app.services.signals.signal_rules.event_signal_rules import (
+from app.services.signals.event_signals.event_signal_rules import (
     news_sentiment_rule,
     earnings_anticipation_rule,
     keyword_trigger_rule,
@@ -33,7 +34,7 @@ from datetime import datetime as dt
 import datetime
 import pandas as pd
 from core.logger import logger
-from common.debug_utils import create_debug_logger, debug_strategy, debug_backtest, debug_data_provider, debug_event_provider, debug_signals
+from common.debug_utils import create_debug_logger, debug_strategy, debug_backtest, debug_data_provider, debug_event_provider, debug_signals, debug_indicators
 
 # 添加Excel导出功能
 import openpyxl
@@ -744,8 +745,8 @@ def generate_unified_signals_with_configs(price_data: pd.DataFrame,
             # 处理RSI规则
             if data_signal_config.get('rsi', {}).get('enable', True):
                 rsi_config = data_signal_config.get('rsi', {})
-                if rsi_config.get('use_parameterized', False):
-                    config_rsi_rule = create_parameterized_rsi_rule(
+                if rsi_config.get('use_parameterized', False): # 使用参数化规则
+                    config_rsi_rule = ParameterizedRuleFactory.create_rsi_rule(
                         period=rsi_config.get('period', 14),
                         oversold=rsi_config.get('oversold', 30),
                         overbought=rsi_config.get('overbought', 70),
@@ -754,8 +755,10 @@ def generate_unified_signals_with_configs(price_data: pd.DataFrame,
                     )
                     data_generator.add_signal_rule(config_rsi_rule)
                     debug_signals(f"配置参数化RSI规则: 周期={rsi_config.get('period', 14)}, 超卖={rsi_config.get('oversold', 30)}, 超买={rsi_config.get('overbought', 70)}{', 参数将会自适应' if rsi_config.get('adaptive', False) else ''}")
-                else:
-                    data_generator.add_signal_rule(default_rsi_rule)
+                else: # 使用默认参数
+                    basic_rsi_rule = default_rsi_rule
+                    basic_rsi_rule.metadata = BASIC_RULES_METADATA['rsi']
+                    data_generator.add_signal_rule(basic_rsi_rule)
                     debug_signals("配置默认的RSI规则")
                 enabled_data_rules.append('rsi')
 
@@ -764,7 +767,7 @@ def generate_unified_signals_with_configs(price_data: pd.DataFrame,
             if data_signal_config.get('ma_crossover', {}).get('enable', True):
                 ma_config = data_signal_config.get('ma_crossover', {})
                 if ma_config.get('use_parameterized', False):
-                    config_ma_rule = create_parameterized_ma_rule(
+                    config_ma_rule = ParameterizedRuleFactory.create_ma_rule(
                         short_period=ma_config.get('short_period', 5),
                         long_period=ma_config.get('long_period', 20),
                         adaptive=ma_config.get('adaptive', False),
@@ -772,8 +775,10 @@ def generate_unified_signals_with_configs(price_data: pd.DataFrame,
                     )
                     data_generator.add_signal_rule(config_ma_rule)
                     debug_signals(f"配置参数化MA规则: 短周期={ma_config.get('short_period', 5)}, 长周期={ma_config.get('long_period', 20)}{', 参数将会自适应' if ma_config.get('adaptive', False) else ''}")
-                else:
-                    data_generator.add_signal_rule(default_ma_crossover_rule)
+                else: # 使用默认参数
+                    basic_ma_rule = default_ma_crossover_rule
+                    basic_ma_rule.metadata = BASIC_RULES_METADATA['ma_crossover']
+                    data_generator.add_signal_rule(basic_ma_rule)
                     debug_signals("配置默认的MA规则")
                 enabled_data_rules.append('ma_crossover')
             
@@ -788,7 +793,7 @@ def generate_unified_signals_with_configs(price_data: pd.DataFrame,
                     indicators, _ = calculate_indicators_for_rule_configs(price_data, data_signal_config)
                     # 修复：先获取字典的键，再进行切片
                     indicator_keys = list(indicators.keys())
-                    debug_signals("技术指标计算汇总", {
+                    debug_indicators("技术指标计算汇总", {
                         "指标数量": len(indicators),
                         "指标列表": ", ".join(indicator_keys[:20]) + (f"... 还有{len(indicators)-20}个" if len(indicators) > 20 else ""),
                         "数据行数": len(price_data)
@@ -972,7 +977,7 @@ def generate_unified_signal_with_names(symbol: str,
         # 验证规则是否存在
         valid_rules = []
         for rule_name in rule_names:
-            if rule_registry.get_rule(rule_name):
+            if rule_registry.get_signal_rule(rule_name):
                 valid_rules.append(rule_name)
             else:
                 logger.warning(f"[Strategy]规则 {rule_name} 不存在，跳过")

@@ -6,6 +6,7 @@ from app.services.strategy.backtest_service import EnhancedBacktestService, Back
 from app.services.test.debug_strategy import debug_unified_signals, get_and_preprocess_stock_data
 from app.services.strategy.strategy_service import generate_unified_signals_with_configs
 from app.services.storage.excel_storage_service import excel_storage
+from app.services.test.debug_strategy import create_mock_events_data
 import pandas as pd
 import datetime
 from core.logger import logger
@@ -34,12 +35,6 @@ def debug_backtest_system():
             return
             
         print(f"✓ {message}")
-        
-        # 使用与debug_unified_signals相同的配置生成信号
-        from app.services.test.debug_strategy import create_mock_events_data
-        
-        events_data = create_mock_events_data(df, event_count=50)
-        print(f"✓ 创建了 {len(events_data)} 个模拟事件")
         
         # 使用debug_strategy中相同的配置
         data_signal_config = {

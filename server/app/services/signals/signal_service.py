@@ -4,20 +4,21 @@ import numpy as np
 from typing import List, Dict, Optional
 from datetime import datetime
 
-from server.common.debug_utils import debug_signals
+from common.debug_utils import debug_signals, debug_indicators
 
-# 导入数据驱动相关
-from .signal_rules.data_signal_rules import (
+# 导入数据驱动相关 - 使用新的模块结构
+from .data_signals import (
     TechnicalSignalContext,
     default_ma_crossover_rule,
     default_rsi_rule,
     trend_strength_filter_rule,
-    support_resistance_breakout_rule
+    support_resistance_breakout_rule,
+    rule_registry
 )
 
 # 导入事件驱动相关
 from app.services.events.event_service import MarketEvent, EventType, EventSeverity
-from .signal_rules.event_signal_rules import (
+from .event_signals.event_signal_rules import (
     news_sentiment_rule,
     earnings_anticipation_rule,
     keyword_trigger_rule
@@ -47,19 +48,36 @@ class DataSignalGenerator:
     def generate_signals(self, df: pd.DataFrame, indicators: Dict[str, pd.Series]) -> List[Dict]:
         """生成技术信号"""
         signals = []
+        rule_names = []
         logger.debug(f"[SignalService]开始生成数据信号，数据行数: {len(df)}, 信号规则数量: {len(self.signal_rules)}")
-        logger.info(f"[SignalService]信号规则: {[rule.__name__ for rule in self.signal_rules]}")
+        logger.debug(f"[SignalService]规则列表: {self.signal_rules}")
+        logger.debug(f"[SignalService]规则详细信息:")
+        for i, rule in enumerate(self.signal_rules):
+            logger.debug(f"[SignalService]规则{i}: metadata={rule.metadata}")
+            if hasattr(rule, 'metadata') and 'chinese_name' in rule.metadata:
+                rule_names.append(rule.metadata['chinese_name'])
+                
+        logger.info(f"[SignalService]信号规则: {rule_names}")
         logger.info(f"[SignalService]过滤规则: {[rule.__name__ for rule in self.filter_rules]}")
-        logger.info(f"[SignalService]可用指标: {list(indicators.keys())}")
-        # 添加详细的指标统计信息
+        logger.info(f"[SignalService]可用指标列表: {list(indicators.keys())}")
+        # 使用debug_indicators输出指标统计信息
         for name, series in indicators.items():
             valid_count = series.notna().sum()
-            logger.info(f"[SignalService]指标 {name}: 长度={len(series)}, 有效值数量={valid_count}, 类型={series.dtype}")
+            debug_indicators(f"指标统计 - {name}", {
+                "长度": len(series),
+                "有效值数量": valid_count,
+                "数据类型": str(series.dtype),
+                "缺失值数量": len(series) - valid_count
+            })
         
         # 添加每个规则的信号计数器
         rule_signal_counts = {}
         for rule in self.signal_rules:
-            rule_name = getattr(rule, 'chinese_name', rule.__name__ if hasattr(rule, '__name__') else str(rule))
+            # 优先从 metadata 中获取 chinese_name
+            if hasattr(rule, 'metadata') and isinstance(rule.metadata, dict):
+                rule_name = rule.metadata.get('chinese_name', f'规则{len(rule_signal_counts)}')
+            else:
+                rule_name = getattr(rule, 'chinese_name', rule.__name__ if hasattr(rule, '__name__') else f'规则{len(rule_signal_counts)}')
             rule_signal_counts[rule_name] = 0
         
         for i in range(1, len(df)):  # 从第二行开始，确保有前一期数据
@@ -99,22 +117,25 @@ class DataSignalGenerator:
                 market_context=market_context
             )
             
-            # 添加详细的上下文调试信息（每100行输出一次）
-            if i % 100 == 0:
-                logger.info(f"[SignalService]第{i}行上下文: 价格={price}, 成交量={volume}, 指标数量={len(extracted_indicators)}")
-                logger.info(f"[SignalService]第{i}行指标值: {extracted_indicators}")
+            if i == 10:
+                debug_indicators(f"第{i}行上下文", {
+                    "价格": price,
+                    "成交量": volume,
+                    "指标数量": len(extracted_indicators)
+                })
+                debug_indicators(f"第{i}行指标值", extracted_indicators)
             
             # 应用所有信号规则
             for rule_idx, rule in enumerate(self.signal_rules):
                 try:
                     # 在循环开始就定义 rule_name，确保在所有分支中都可用
-                    rule_name = getattr(rule, 'chinese_name', rule.__name__ if hasattr(rule, '__name__') else f"规则{rule_idx}")
+                    # 优先从 metadata 中获取 chinese_name
+                    if hasattr(rule, 'metadata') and isinstance(rule.metadata, dict):
+                        rule_name = rule.metadata.get('chinese_name', f'规则{rule_idx}')
+                    else:
+                        rule_name = getattr(rule, 'chinese_name', rule.__name__ if hasattr(rule, '__name__') else f'规则{rule_idx}')
                     signal = rule(context)
                     if signal:
-                        # 记录原始信号生成
-                        logger.debug(f"[SignalService]第{i}行规则{rule_name}生成原始信号: 类型={signal.get('signal')}, 强度={signal.get('strength'):.3f}")
-                        
-                        # 应用过滤规则
                         if self._apply_filters(signal, context):
                             # 应用权重规则
                             signal = self._apply_weights(signal, context)
@@ -122,9 +143,6 @@ class DataSignalGenerator:
                             rule_signal_counts[rule_name] += 1
                         else:
                             logger.debug(f"[SignalService]第{i}行规则{rule_name}信号被过滤规则拒绝")
-                    else:
-                        if i % 200 == 0:  # 减少未触发信号的日志频率
-                            logger.debug(f"[SignalService]第{i}行规则{rule_name}未触发(每200行抽样)")
                 except Exception as e:
                     logger.error(f"[SignalService]第{i}行规则{rule_idx}({rule_name})执行失败: {e}")
                     import traceback
@@ -135,12 +153,6 @@ class DataSignalGenerator:
         for signal in signals:
             signal_type = signal.get('signal', 'unknown')
             signal_type_stats[signal_type] = signal_type_stats.get(signal_type, 0) + 1
-        
-        # 输出详细的统计信息
-        logger.info(f"[DataSignalService]各规则生成信号数量: {rule_signal_counts}")
-        logger.info(f"[DataSignalService]信号类型分布: {signal_type_stats}")
-        logger.info(f"[DataSignalService]总信号数量: {len(signals)}")
-        
         return signals
     
     def _extract_indicators(self, indicators: Dict, index: int, prev_row) -> Dict[str, float]:
@@ -168,22 +180,22 @@ class DataSignalGenerator:
                         result[name] = 0.0
                 
                 # 处理前一期值
-                if index > 0:
-                    prev_value = series.iloc[index-1]
-                    if pd.notna(prev_value):
-                        try:
-                            converted_prev_value = float(pd.to_numeric(prev_value, errors='coerce'))
-                            result[f'{name}_prev'] = converted_prev_value
-                        except (ValueError, TypeError) as e:
-                            if name.startswith('RSI') or name.startswith('MACD') or name.startswith('MA'):
-                                result[f'{name}_prev'] = np.nan
-                            else:
-                                result[f'{name}_prev'] = 0.0
-                    else:
-                        if name.startswith('RSI') or name.startswith('MACD') or name.startswith('MA'):
-                            result[f'{name}_prev'] = np.nan
-                        else:
-                            result[f'{name}_prev'] = 0.0
+                # if index > 0:
+                #     prev_value = series.iloc[index-1]
+                #     if pd.notna(prev_value):
+                #         try:
+                #             converted_prev_value = float(pd.to_numeric(prev_value, errors='coerce'))
+                #             result[f'{name}_prev'] = converted_prev_value
+                #         except (ValueError, TypeError) as e:
+                #             if name.startswith('RSI') or name.startswith('MACD') or name.startswith('MA'):
+                #                 result[f'{name}_prev'] = np.nan
+                #             else:
+                #                 result[f'{name}_prev'] = 0.0
+                #     else:
+                #         if name.startswith('RSI') or name.startswith('MACD') or name.startswith('MA'):
+                #             result[f'{name}_prev'] = np.nan
+                #         else:
+                #             result[f'{name}_prev'] = 0.0
         return result
     
     def _calculate_market_context(self, df: pd.DataFrame, index: int) -> Dict[str, float]:
@@ -192,6 +204,7 @@ class DataSignalGenerator:
         start_idx = max(0, index - 20)
         recent_data = df.iloc[start_idx:index+1]
         
+        # 确保至少有2行数据才计算波动率
         if len(recent_data) > 1:
             # 优先使用中文列名，再尝试英文列名
             close_col = None
@@ -206,13 +219,20 @@ class DataSignalGenerator:
                 returns = recent_data[close_col].pct_change().dropna()
                 if len(returns) > 0:
                     daily_volatility = returns.std()
-                    # 年化波动率：日波动率 * sqrt(252)
-                    volatility = daily_volatility * np.sqrt(252)
+                    # 强化NaN检查
+                    if pd.isna(daily_volatility) or daily_volatility <= 0 or not np.isfinite(daily_volatility):
+                        volatility = 0.2  # 默认波动率
+                    else:
+                        volatility = daily_volatility * np.sqrt(252)
+                        # 再次检查年化后的波动率
+                        if pd.isna(volatility) or volatility <= 0 or not np.isfinite(volatility):
+                            volatility = 0.2
                 else:
                     volatility = 0.2
             else:
                 volatility = 0.2
         else:
+            # 数据不足时直接使用默认值
             volatility = 0.2
         
         # 计算平均成交量，确保不返回NaN
@@ -296,10 +316,6 @@ class EventSignalGenerator:
                             logger.debug(f"[EventSignalService]第{event_idx}个事件:{rule_name}对事件{event.event_type}生成信号: 事件类型={event.event_type}, 信号类型={signal.get('signal')}, 强度={signal.get('strength'):.3f}, 原因={signal.get('reason')}, 事件ID={signal.get('event_id')}")
 
                         signals.append(signal)
-                    else:
-                        if event_idx % 100 == 0:
-                            rule_name = getattr(rule_func, 'chinese_name', rule_func.__name__ if hasattr(rule_func, '__name__') else f"事件规则{rule_idx}")
-                            logger.debug(f"[EventSignalService]第{event_idx}个事件:{rule_name}对事件{event.event_type}未触发(每100的抽样)")
                 except Exception as e:
                     rule_name = getattr(rule_func, 'chinese_name', rule_func.__name__ if hasattr(rule_func, '__name__') else f"事件规则{rule_idx}")
                     logger.error(f"[EventSignalService]第{event_idx}个事件:{rule_name}处理事件{event_idx}失败: {e}")

@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional, Union, Tuple
 from functools import wraps
+from common.debug_utils import debug_indicators
 def validate_dataframe(func):
     """装饰器：验证DataFrame格式和必要列"""
     @wraps(func)
@@ -180,25 +181,19 @@ class IndicatorCalculator:
             indicator_columns = []
             
             for period in periods:
-                col_name = f'{ma_type.upper()}{period}'
+                col_name = f'{ma_type.upper()}_{period}'  # 改为小写+下划线格式
                 
-                if ma_type.lower() == 'sma':
+                if ma_type.upper() == 'SMA':
                     result_df[col_name] = df['close'].rolling(window=period).mean()
-                elif ma_type.lower() == 'ema':
+                elif ma_type.upper() == 'EMA':
                     result_df[col_name] = df['close'].ewm(span=period).mean()
-                elif ma_type.lower() == 'wma':
+                elif ma_type.upper() == 'WMA':
                     weights = np.arange(1, period + 1)
                     result_df[col_name] = df['close'].rolling(window=period).apply(
                         lambda x: np.average(x, weights=weights), raw=True
                     )
                 
                 indicator_columns.append(col_name)
-                
-                # 记录有效值信息（debugInfo）
-                # first_valid_idx = result_df[col_name].first_valid_index()
-                # if first_valid_idx is not None:
-                #     logger.info(f"[IndicatorCalculator]{col_name} 从索引{first_valid_idx}开始有效")
-            
             return self._format_result(result_df, f"{ma_type.upper()}移动平均线计算完成", indicator_columns)
             
         except Exception as e:
@@ -235,7 +230,7 @@ class IndicatorCalculator:
             
             # 添加除0保护 - 使用向量化操作
             rs = gain / loss.replace(0, np.nan)
-            rsi_column = f'RSI{period}'
+            rsi_column = f'RSI_{period}'
             result_df[rsi_column] = 100 - (100 / (1 + rs))
             
             # 处理边界情况
@@ -290,8 +285,8 @@ class IndicatorCalculator:
                 
                 # 添加除0保护
                 rs = gain / loss.replace(0, np.nan)
-                rsi_column = f'RSI{period}'
-                result_df[rsi_column] = 100 - (100 / (1 + rs))
+                rsi_column = f'RSI_{period}'  # 修改为下划线格式
+                result_df[rsi_column] = 100 - (100 / (1 + rs))  
                 
                 # 处理边界情况 - 修复布尔掩码使用方式
                 # 使用 .where() 方法替代 .loc[] 索引
@@ -336,10 +331,10 @@ class IndicatorCalculator:
             exp1 = df['close'].ewm(span=fast).mean()
             exp2 = df['close'].ewm(span=slow).mean()
             result_df['MACD'] = exp1 - exp2
-            result_df['MACD_Signal'] = result_df['MACD'].ewm(span=signal).mean()
-            result_df['MACD_Histogram'] = result_df['MACD'] - result_df['MACD_Signal']
+            result_df['MACD_SIGNAL'] = result_df['MACD'].ewm(span=signal).mean()
+            result_df['MACD_HISTOGRAM'] = result_df['MACD'] - result_df['MACD_SIGNAL']
             
-            indicator_columns = ['MACD', 'MACD_Signal', 'MACD_Histogram']
+            indicator_columns = ['MACD', 'MACD_SIGNAL', 'MACD_HISTOGRAM']
             return self._format_result(result_df, "MACD指标计算完成", indicator_columns)
             
         except Exception as e:
@@ -362,14 +357,14 @@ class IndicatorCalculator:
             result_df = df.copy()
             
             # 计算布林带
-            result_df['BB_Middle'] = df['close'].rolling(window=period).mean()
+            result_df['BB_MIDDLE'] = df['close'].rolling(window=period).mean()
             bb_std = df['close'].rolling(window=period).std()
-            result_df['BB_Upper'] = result_df['BB_Middle'] + (bb_std * std_dev)
-            result_df['BB_Lower'] = result_df['BB_Middle'] - (bb_std * std_dev)
-            result_df['BB_Width'] = result_df['BB_Upper'] - result_df['BB_Lower']
-            result_df['BB_Position'] = (df['close'] - result_df['BB_Lower']) / result_df['BB_Width']
+            result_df['BB_UPPER'] = result_df['BB_MIDDLE'] + (bb_std * std_dev)
+            result_df['BB_LOWER'] = result_df['BB_MIDDLE'] - (bb_std * std_dev)
+            result_df['BB_WIDTH'] = result_df['BB_UPPER'] - result_df['BB_LOWER']
+            result_df['BB_POSITION'] = (df['close'] - result_df['BB_LOWER']) / result_df['BB_WIDTH']
             
-            indicator_columns = ['BB_Upper', 'BB_Middle', 'BB_Lower', 'BB_Width', 'BB_Position']
+            indicator_columns = ['BB_UPPER', 'BB_MIDDLE', 'BB_LOWER', 'BB_WIDTH', 'BB_POSITION']
             return self._format_result(result_df, "布林带指标计算完成", indicator_columns)
             
         except Exception as e:
@@ -462,17 +457,17 @@ class IndicatorCalculator:
             
             # 成交量移动平均
             for period in periods:
-                col_name = f'Volume_MA{period}'
+                col_name = f'VOLUME_MA_{period}'
                 result_df[col_name] = df['volume'].rolling(window=period).mean()
                 indicator_columns.append(col_name)
-            
+
             # 成交量比率
             if len(periods) >= 2:
                 short_period, long_period = periods[0], periods[1]
-                result_df['Volume_Ratio'] = (
-                    result_df[f'Volume_MA{short_period}'] / result_df[f'Volume_MA{long_period}']
+                result_df['VOLUME_RATIO'] = (
+                    result_df[f'VOLUME_MA_{short_period}'] / result_df[f'VOLUME_MA_{long_period}']
                 )
-                indicator_columns.append('Volume_Ratio')
+                indicator_columns.append('VOLUME_RATIO')
             
             # 价量配合指标
             if 'close' in df.columns:
@@ -595,7 +590,83 @@ class IndicatorCalculator:
         """获取支持的指标列表"""
         return list(self.supported_indicators.keys())
 
-
+def calculate_adaptive_period(base_period: int, 
+                            volatility: float, 
+                            indicator_type: str = 'rsi',
+                            is_short: bool = True,
+                            min_period: int = None,
+                            max_period: int = None) -> int:
+    """
+    计算自适应周期
+    :param base_period: 基础周期
+    :param volatility: 波动率
+    :param indicator_type: 指标类型 ('rsi', 'ma')
+    :param is_short: 是否为短周期（仅MA使用）
+    :param min_period: 最小周期（可选，覆盖默认值）
+    :param max_period: 最大周期（可选，覆盖默认值）
+    :return: 自适应周期
+    """
+    if indicator_type.lower() == 'rsi':
+        # RSI: 波动率高时周期增加（更平滑）
+        min_p = min_period or 7
+        max_p = max_period or 21
+        return max(min_p, min(max_p, int(base_period * (1 + volatility))))
+    
+    elif indicator_type.lower() == 'ma':
+        # MA: 波动率高时周期减少（更敏感）
+        vol_factor = max(0.7, 1 - volatility)
+        if is_short:
+            min_p = min_period or 3
+            max_p = max_period or base_period
+            return max(min_p, min(max_p, int(base_period * vol_factor)))
+        else:
+            # 长周期需要确保大于短周期
+            adaptive_short = calculate_adaptive_period(
+                base_period=int(base_period * 0.3), 
+                volatility=volatility, 
+                indicator_type='ma', 
+                is_short=True
+            )
+            min_p = min_period or (adaptive_short + 5)
+            max_p = max_period or base_period
+            return max(min_p, min(max_p, int(base_period * vol_factor)))
+    
+    else:
+        # 默认情况，直接返回基础周期
+        return base_period
+def get_adaptive_periods_range(base_period: int,
+                             indicator_type: str = 'rsi',
+                             is_short: bool = True,
+                             volatility_range: tuple = (0.0, 1.0),
+                             step: float = 0.05,
+                             **kwargs) -> List[int]:
+    """
+    获取指标所有可能的自适应周期范围
+    :param base_period: 基础周期
+    :param indicator_type: 指标类型
+    :param is_short: 是否为短周期
+    :param volatility_range: 波动率范围
+    :param step: 波动率步长
+    :param kwargs: 其他参数（如min_period, max_period）
+    :return: 周期列表
+    """
+    periods = set([base_period])
+    
+    min_vol, max_vol = volatility_range
+    volatility = min_vol
+    
+    while volatility <= max_vol:
+        adaptive_period = calculate_adaptive_period(
+            base_period=base_period,
+            volatility=volatility,
+            indicator_type=indicator_type,
+            is_short=is_short,
+            **kwargs
+        )
+        periods.add(adaptive_period)
+        volatility += step
+    
+    return sorted(list(periods))
 def calculate_indicators_for_rule_configs(df: pd.DataFrame, 
                                     config: Dict) -> Tuple[Dict, pd.DataFrame]:
     """为策略服务提供的便捷指标计算函数"""
@@ -608,24 +679,43 @@ def calculate_indicators_for_rule_configs(df: pd.DataFrame,
         ma_config = config.get('ma_crossover', {})
         
         if ma_config.get('adaptive', False):
-            periods = [3, 5, 10, 20, 30]
-            logger.debug(f"[Indicator]使用MA自适应模式，涉及指标周期: {periods}")
+            # 自适应模式：计算更广泛的周期范围以覆盖可能的自适应周期
+            base_short = ma_config.get('short_period', 5)
+            base_long = ma_config.get('long_period', 20)
+            # 分别计算短期和长期MA的自适应周期范围
+            short_periods = get_adaptive_periods_range(
+                base_period=base_short,
+                indicator_type='ma',
+                is_short=True,
+                volatility_range=(0.0, 1.0),
+                step=0.05
+            )
+            long_periods = get_adaptive_periods_range(
+                base_period=base_long,
+                indicator_type='ma',
+                is_short=False,
+                volatility_range=(0.0, 1.0),
+                step=0.05
+            )
+            periods = sorted(list(set(short_periods + long_periods)))
+            logger.debug(f"[Indicator]使用MA自适应模式，计算周期范围: {periods}")
         else:
             periods = [ma_config.get('short_period', 5), ma_config.get('long_period', 20)]
-            logger.debug(f"[Indicator]使用固定MA周期: {periods}")   
+            logger.debug(f"[Indicator]使用固定MA周期: {periods}")
             
         ma_result = calculator.calculate_moving_averages(df, periods)
         
         if ma_result['status'] == 'success':
             ma_df = pd.DataFrame(ma_result['data'])
             for col in ma_df.columns:
-                if col.startswith('SMA'):
-                    # 修复：返回 pandas Series 而不是 list
+                if col.startswith('SMA_'):  # 匹配新的命名格式
                     try:
-                        indicators[col.replace('SMA', 'MA')] = pd.to_numeric(ma_df[col], errors='coerce').fillna(0)
+                        # 将SMA_5转换为MA_5格式以保持向后兼容
+                        period = col.split('_')[1]
+                        indicators[f'MA_{period}'] = pd.to_numeric(ma_df[col], errors='coerce').fillna(0)
                     except Exception as e:
                         logger.warning(f"[Indicator]MA指标 {col} 转换失败: {e}")
-                        indicators[col.replace('SMA', 'MA')] = pd.Series(dtype=float)
+                        indicators[f'MA_{period}'] = pd.Series(dtype=float)
     
     # RSI指标
     if config.get('rsi', {}).get('enable', True):
@@ -633,14 +723,13 @@ def calculate_indicators_for_rule_configs(df: pd.DataFrame,
         
         if rsi_config.get('adaptive', False):
             base_period = rsi_config.get('period', 14)
-            periods = [
-                max(base_period - 7, 7),
-                max(base_period - 4, 10),
-                base_period,
-                min(base_period + 7, 28),
-                min(base_period + 14, 35)
-            ]
-            periods = sorted(list(set(periods)))
+            # rsi 自适应周期计算
+            periods = get_adaptive_periods_range(
+                base_period=base_period,
+                indicator_type='rsi',
+                volatility_range=(0.0, 1.0),
+                step=0.05
+            )
             logger.debug(f"[Indicator]使用RSI自适应模式，涉及指标周期: {periods}")
             
             rsi_result = calculator.calculate_multiple_rsi(df, periods)
@@ -648,17 +737,16 @@ def calculate_indicators_for_rule_configs(df: pd.DataFrame,
             if rsi_result['status'] == 'success':
                 rsi_df = pd.DataFrame(rsi_result['data'])
                 for period in periods:
-                    rsi_column = f'RSI{period}'
+                    rsi_column = f'RSI_{period}'  # 匹配新的命名格式
                     if rsi_column in rsi_df.columns:
-                        # 修复：返回 pandas Series 而不是 list
                         try:
-                            indicators[rsi_column] = pd.to_numeric(rsi_df[rsi_column], errors='coerce').fillna(50)
+                            indicators[f'RSI_{period}'] = pd.to_numeric(rsi_df[rsi_column], errors='coerce').fillna(50)
                         except Exception as e:
                             logger.warning(f"[Indicator]RSI指标 {rsi_column} 转换失败: {e}")
-                            indicators[rsi_column] = pd.Series(dtype=float)
+                            indicators[f'RSI_{period}'] = pd.Series(dtype=float)
                 
                 # 为了向后兼容，也保留原来的键名
-                base_rsi_column = f'RSI{base_period}'
+                base_rsi_column = f'rsi_{base_period}'
                 if base_rsi_column in indicators:
                     indicators['RSI'] = indicators[base_rsi_column]
         else:
@@ -669,7 +757,7 @@ def calculate_indicators_for_rule_configs(df: pd.DataFrame,
             
             if rsi_result['status'] == 'success':
                 rsi_df = pd.DataFrame(rsi_result['data'])
-                rsi_column = f'RSI{period}'
+                rsi_column = f'RSI_{period}'
                 if rsi_column in rsi_df.columns:
                     # 修复：返回 pandas Series 而不是 list
                     try:
@@ -684,16 +772,17 @@ def calculate_indicators_for_rule_configs(df: pd.DataFrame,
 
 def calculate_indicators_for_rule_names(price_data: pd.DataFrame, rule_names: List[str]) -> Dict[str, pd.Series]:
     """基于规则注册表计算所需指标"""
-    from app.services.signals.signal_rules.data_signal_rules import rule_registry
+    from app.services.signals.data_signals import rule_registry
     
     # 获取所有需要的指标
     indicator_info = rule_registry.get_all_indicators(rule_names)
     required_indicators = indicator_info['required']
     optional_indicators = indicator_info['optional']
     
-    logger.info(f"[IndicatorService]规则 {rule_names} 需要指标:")
-    logger.info(f"[IndicatorService]必需指标: {required_indicators}")
-    logger.info(f"[IndicatorService]可选指标: {optional_indicators}")
+    debug_indicators(f"规则 {rule_names} 指标需求", {
+        "必需指标": required_indicators,
+        "可选指标": optional_indicators
+    })
     
     indicators = {}
     calculator = IndicatorCalculator()

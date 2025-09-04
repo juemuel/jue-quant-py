@@ -38,11 +38,18 @@ class ColoredConsole:
 class DebugConfig:
     """调试配置类"""
     DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
+    # 数据调试工具
     DEBUG_DATA_PROVIDER = os.getenv("DEBUG_DATA_PROVIDER", "False").lower() == "true"
+    # 事件调试工具
     DEBUG_EVENT_PROVIDER = os.getenv("DEBUG_EVENT_PROVIDER", "False").lower() == "true"
+    # 策略调试工具
     DEBUG_STRATEGY = os.getenv("DEBUG_STRATEGY", "False").lower() == "true"
+    # 回测调试工具
     DEBUG_BACKTEST = os.getenv("DEBUG_BACKTEST", "False").lower() == "true"
+    # 信号调试工具
     DEBUG_SIGNALS = os.getenv("DEBUG_SIGNALS", "False").lower() == "true"
+    # 指标调试工具
+    DEBUG_INDICATORS = os.getenv("DEBUG_INDICATORS", "False").lower() == "true"
     DEBUG_LEVEL = os.getenv("DEBUG_LEVEL", "INFO").upper()
 
 # 添加一个类变量来跟踪状态提示是否已显示
@@ -54,6 +61,7 @@ class DebugPrinter:
         'strategy': False,
         'backtest': False,
         'signals': False,
+        'indicators': False,
     }
     
     @staticmethod
@@ -178,17 +186,18 @@ def debug_strategy(message: str, data: Any = None, level: str = "INFO"):
     DebugPrinter.show_status_once('strategy', DebugConfig.DEBUG_STRATEGY)
     if DebugConfig.DEBUG_STRATEGY:
         DebugPrinter.print_if_enabled('strategy', message, data, level)
-
 def debug_backtest(message: str, data: Any = None, level: str = "INFO"):
     DebugPrinter.show_status_once('backtest', DebugConfig.DEBUG_BACKTEST)
     if DebugConfig.DEBUG_BACKTEST:
         DebugPrinter.print_if_enabled('backtest', message, data, level)
-
 def debug_signals(message: str, data: Any = None, level: str = "INFO"):
     DebugPrinter.show_status_once('signals', DebugConfig.DEBUG_SIGNALS)
     if DebugConfig.DEBUG_SIGNALS:
         DebugPrinter.print_if_enabled('signals', message, data, level)
-
+def debug_indicators(message: str, data: Any = None, level: str = "INFO"):
+    DebugPrinter.show_status_once('indicators', DebugConfig.DEBUG_INDICATORS)
+    if DebugConfig.DEBUG_INDICATORS:
+        DebugPrinter.print_if_enabled('indicators', message, data, level)
 
 class UnifiedDebugLogger:
     """统一调试日志管理器 - 整合 debug_utils 和 progress_tracker"""
@@ -229,7 +238,13 @@ class UnifiedDebugLogger:
             self.progress_tracker.log_step_success(step_name, summary, details, **kwargs)
         else:
             self.success(f"完成 {step_name}: {summary}")
-    
+    def step_skip(self, step_name: str, reason: str = "", **kwargs):
+        """跳过步骤"""
+        if self.progress_tracker and self._session_active:
+            # 使用 log_info 方法记录跳过信息
+            self.progress_tracker.log_info(f"⏭️ 跳过 {step_name}: {reason}", kwargs if kwargs else None)
+        else:
+            self.info(f"⏭️ 跳过 {step_name}: {reason}")
     def step_error(self, step_name: str, error_msg: str, details: dict = None, **kwargs):
         """步骤错误"""
         if self.progress_tracker and self._session_active:
