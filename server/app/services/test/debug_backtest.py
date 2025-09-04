@@ -31,15 +31,11 @@ def debug_backtest_system():
             'data_rows': len(df),
             'date_range': f"{df['日期'].min()} ~ {df['日期'].max()}"
         })
-        # 检查和修复价格数据的日期索引
         data_df = df.copy()
-        data_df['日期'] = pd.to_datetime(data_df['日期'])
-        data_df = data_df.set_index('日期')
-        debug_signals("价格数据调试", {
-                "价格数据形状": data_df.shape,
-                "价格数据列名": list(data_df.columns),
-                "价格数据样例": data_df.head() if not data_df.empty else "无数据"
-            }, level="INFO", horizontal_output=True, show_full_content=True)
+        # 格式化日期并设为索引
+        if '日期' in data_df.columns:
+            data_df['日期'] = pd.to_datetime(data_df['日期'])
+            data_df = data_df.set_index('日期')
         
         # 2. 信号配置
         logger.step_start("2. 信号配置", "创建数据信号和事件信号配置")
@@ -145,11 +141,7 @@ def debug_backtest_system():
         # 确保信号数据中的timestamp也是datetime格式
         if 'timestamp' in signals_df.columns:
             signals_df['timestamp'] = pd.to_datetime(signals_df['timestamp'])
-        debug_signals("信号数据调试", {
-            "信号数据形状": signals_df.shape,
-            "信号数据列名": list(signals_df.columns),
-            "信号数据样例": signals_df.head() if not signals_df.empty else "无数据"
-        }, level="INFO", horizontal_output=True, show_full_content=True)
+
         # 为回测做字段处理
         if 'direction' in signals_df.columns and 'action' not in signals_df.columns:
             # 数字到action的映射
@@ -159,24 +151,23 @@ def debug_backtest_system():
                 0: 'hold'    # 观望（但回测系统会忽略这个）
             }
             signals_df['action'] = signals_df['direction'].map(direction_to_action)
-            debug_signals("action字段转换", {
-                "action字段值分布": signals_df['action'].value_counts().to_dict()
-            })
-            # 过滤掉观望信号（action为'hold'或None的）
-            valid_signals = signals_df[signals_df['action'].isin(['buy', 'sell'])]
-            debug_signals("有效交易信号", {
-                "有效交易信号数量": len(valid_signals),
-                "过滤前信号数量": len(signals_df)
-            })
-            # 使用有效信号
-            signals_df = valid_signals
-        
-        if not signals_df.empty:
-            # 检查direction字段的值分布
+            
             debug_signals("direction字段分布", {
                 "direction值分布": signals_df['direction'].value_counts().to_dict()
             })
+            debug_signals("action字段转换", {
+                "action字段值分布": signals_df['action'].value_counts().to_dict()
+            })
+            valid_signals = signals_df[signals_df['action'].isin(['buy', 'sell'])]
+            debug_signals("有效交易信号", {
+                "过滤前信号数量": len(signals_df),
+                "过滤后信号数量": len(valid_signals)
+            })
+            signals_df = valid_signals
+        if 'strength' in signals_df.columns:
+            signals_df['strength'] = signals_df['strength'].apply(lambda x: max(0.1, abs(x)))
 
+        if not signals_df.empty:
             signal_dates = set(signals_df['timestamp'].dt.date)
             price_dates = set(data_df.index.date if hasattr(data_df.index[0], 'date') else data_df.index)
             overlapping_dates = signal_dates.intersection(price_dates)
@@ -193,14 +184,11 @@ def debug_backtest_system():
                 "重叠日期样例": list(overlapping_dates)[:5] if len(overlapping_dates) > 0 else "无"
             }, level="INFO", horizontal_output=True, show_full_content=True)
 
-        if 'strength' in signals_df.columns:
-            signals_df['strength'] = signals_df['strength'].apply(lambda x: max(0.1, abs(x)))
-
         # 转换回字典列表格式
         unified_signals = signals_df.to_dict('records')
         logger.step_info("回测信号数量：", len(unified_signals))
 
-       # 5. 回测配置
+        # 5. 回测配置
         logger.step_start("5. 回测配置", "配置回测参数")
         # 配置回测参数
         backtest_config = BacktestConfig(
@@ -228,6 +216,16 @@ def debug_backtest_system():
         
         # 6. 执行回测
         logger.step_start("6. 回测执行", "执行回测计算")
+        debug_signals("回测用的价格数据调试", {
+            "价格数据形状": data_df.shape,
+            "价格数据列名": list(data_df.columns),
+            "价格数据样例": data_df.head() if not data_df.empty else "无数据"
+        }, level="INFO", horizontal_output=True, show_full_content=True)
+        debug_signals("回测用的信号数据调试", {
+            "信号数据形状": signals_df.shape,
+            "信号数据列名": list(signals_df.columns),
+            "信号数据样例": signals_df.head() if not signals_df.empty else "无数据"
+        }, level="INFO", horizontal_output=True, show_full_content=True)
         backtest_service = EnhancedBacktestService(config=backtest_config)
         backtest_result = backtest_service.realistic_backtest(
             price_data=data_df,
